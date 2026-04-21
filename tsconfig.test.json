@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "outDir": ".test-dist",
+    "module": "commonjs",
+    "target": "ES2022",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"]
+    },
+    "strict": true
+  },
+  "include": [
+    "tests/**/*.ts",
+    "server/security/chat-access.ts",
+    "server/security/approvals-access.ts",
+    "server/security/auth.ts"
+  ]
+}
