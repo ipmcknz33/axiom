@@ -14,6 +14,10 @@
   },
   "include": [
     "tests/**/*.ts",
+    "lib/stripe/**/*.ts",
+    "lib/entitlements/access.ts",
+    "server/billing/**/*.ts",
+    "server/entitlements/**/*.ts",
     "server/security/chat-access.ts",
     "server/security/approvals-access.ts",
     "server/security/auth.ts"

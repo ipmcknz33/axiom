@@ -79,16 +79,38 @@ declare module "next" {
 
 declare module "next/server" {
   export interface NextRequest {
+    cookies: {
+      get(name: string): { name: string; value: string } | undefined;
+    };
     nextUrl: {
       pathname: string;
+      searchParams: {
+        set(name: string, value: string): void;
+      };
     };
+    url: string;
   }
 
   export class NextResponse {
+    cookies: {
+      delete(name: string): void;
+      set(
+        name: string,
+        value: string,
+        options?: {
+          httpOnly?: boolean;
+          maxAge?: number;
+          path?: string;
+          sameSite?: "lax" | "strict" | "none";
+          secure?: boolean;
+        },
+      ): void;
+    };
     headers: {
       set(name: string, value: string): void;
     };
     static next(): NextResponse;
+    static redirect(url: string | URL): NextResponse;
     static json(body: unknown, init?: { status?: number }): NextResponse;
   }
 }

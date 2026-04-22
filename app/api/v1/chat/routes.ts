@@ -1,5 +1,8 @@
 import { fail, failFromError, ok } from "@/lib/api/response";
 import { createApprovalRequest } from "@/server/approvals/service";
+import { getEntitlementContext } from "@/server/entitlements/context";
+import { assertFeatureAccess } from "@/server/entitlements/guards";
+import { resolveUserEntitlementState } from "@/server/entitlements/service";
 import { validateOrchestratorInput } from "@/server/orchestrator";
 import { evaluateChatAccess } from "@/server/security/chat-access";
 import { logAuditEvent } from "@/server/security/audit";
@@ -39,6 +42,13 @@ export async function POST(request: Request) {
     }
 
     const result = validateOrchestratorInput(payload);
+
+    const entitlementCtx = await getEntitlementContext(request);
+    const entitlement = await resolveUserEntitlementState(
+      entitlementCtx.userId,
+    );
+    // Enforce advisor.advanced feature in chat route
+    assertFeatureAccess(entitlement, "advisor.advanced");
 
     if (!result.success) {
       await logAuditEvent({

@@ -1,11 +1,16 @@
-const phases = ["Discovery", "Security baseline", "MVP rollout"] as const;
+const phases = [
+  "Discovery and benchmark",
+  "Permission and approval setup",
+  "Premium launch rollout",
+] as const;
 
 export function ProjectPanel() {
   return (
     <div className="panel">
-      <h3 style={{ marginTop: 0 }}>Projects</h3>
+      <h3 style={{ marginTop: 0 }}>Projects and Tasks</h3>
       <p className="muted">
-        Tracking milestones, owners, and delivery risk across workstreams.
+        Track milestones, ownership, and risk through a single operational
+        queue.
       </p>
       <ul
         style={{ margin: "0.9rem 0 0", paddingLeft: "1.2rem", lineHeight: 1.7 }}

@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import "./globals.css";
+import "./global.css";
 
 export const metadata: Metadata = {
-  title: "Axiom",
-  description: "Modular AI operating system foundation",
+  title: "Axiom by IMDEV Studios",
+  description:
+    "Premium protected AI operations shell with centralized access and entitlement controls.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
