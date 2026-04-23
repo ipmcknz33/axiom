@@ -8,37 +8,10 @@ type UpgradeButtonProps = {
 };
 
 export function UpgradeButton({ plan, text }: UpgradeButtonProps) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [requested, setRequested] = useState(false);
 
-  async function onUpgradeClick() {
-    if (loading) return;
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch("/api/v1/billing/checkout-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan }),
-      });
-
-      const payload = (await response.json()) as {
-        data?: { checkoutUrl?: string };
-        error?: { message?: string };
-      };
-
-      if (!response.ok || !payload.data?.checkoutUrl) {
-        throw new Error(payload.error?.message ?? "Unable to start checkout.");
-      }
-
-      window.location.assign(payload.data.checkoutUrl);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Unable to start checkout.",
-      );
-      setLoading(false);
-    }
+  function onUpgradeClick() {
+    setRequested(true);
   }
 
   return (
@@ -47,11 +20,15 @@ export function UpgradeButton({ plan, text }: UpgradeButtonProps) {
         type="button"
         className="upgrade-btn"
         onClick={onUpgradeClick}
-        disabled={loading}
+        disabled={requested}
       >
-        {loading ? "Redirecting..." : (text ?? `Upgrade to ${plan}`)}
+        {requested ? "Request queued" : (text ?? `Request ${plan} access`)}
       </button>
-      {error ? <p className="upgrade-error">{error}</p> : null}
+      {requested ? (
+        <p className="upgrade-error">
+          Demo mode: checkout is disabled. Ask an admin for internal access.
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -4,11 +4,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 type AccountEntitlementRow = {
   access_status: "active" | "inactive" | "expired";
   billing_status: string | null;
-  last_stripe_event_id: string | null;
   plan: "free" | "trial" | "premium" | "pro" | "business";
   role: "owner" | "admin" | "member" | "internal";
-  stripe_customer_id: string | null;
-  stripe_subscription_id: string | null;
   trial_ends_at: string | null;
   trial_started_at: string | null;
   updated_at: string;
@@ -22,7 +19,7 @@ export async function getAccountEntitlement(
     const supabase = createSupabaseServerClient();
     const { data, error } = await (supabase.from("account_entitlements") as any)
       .select(
-        "user_id,plan,role,access_status,billing_status,last_stripe_event_id,trial_started_at,trial_ends_at,stripe_customer_id,stripe_subscription_id,updated_at",
+        "user_id,plan,role,access_status,billing_status,trial_started_at,trial_ends_at,updated_at",
       )
       .eq("user_id", userId)
       .single();
@@ -58,7 +55,6 @@ export async function createDefaultTrialEntitlement(
       .insert({
         access_status: "active",
         billing_status: "trialing",
-        last_stripe_event_id: null,
         plan: "trial",
         role: "member",
         trial_ends_at: trialEndsAt.toISOString(),
@@ -66,7 +62,7 @@ export async function createDefaultTrialEntitlement(
         user_id: userId,
       })
       .select(
-        "user_id,plan,role,access_status,billing_status,last_stripe_event_id,trial_started_at,trial_ends_at,stripe_customer_id,stripe_subscription_id,updated_at",
+        "user_id,plan,role,access_status,billing_status,trial_started_at,trial_ends_at,updated_at",
       )
       .single();
 

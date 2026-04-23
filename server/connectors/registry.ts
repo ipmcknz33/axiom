@@ -2,8 +2,8 @@ import { ConnectorTemplate } from "@/types/domain";
 
 const connectorTemplates: ConnectorTemplate[] = [
   {
-    id: "google-workspace",
-    provider: "Google Workspace",
+    id: "workspace-suite",
+    provider: "Workspace Suite",
     category: "productivity",
     scopes: ["calendar.read", "gmail.read", "drive.read"],
     isHighRisk: false,

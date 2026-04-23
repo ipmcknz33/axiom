@@ -1,11 +1,11 @@
 import { AgentOverview } from "@/app/components/dashboard/agent-overview";
-import { BillingPanel } from "@/app/components/dashboard/billing-panel";
 import { DashboardShell } from "@/app/components/dashboard/dashboard-shell";
 import { FeatureLock } from "@/app/components/access/feature-lock";
 import { AccessStatePanel } from "@/app/components/dashboard/access-state-panel";
 import { ChatPanel } from "@/app/components/dashboard/chat-panel";
 import { ConnectorPanel } from "@/app/components/dashboard/connector-panel";
 import { MemoryPanel } from "@/app/components/dashboard/memory-panel";
+import { ObservabilityPanel } from "@/app/components/dashboard/observability-panel";
 import { PermissionPanel } from "@/app/components/dashboard/permission-panel";
 import { ProjectPanel } from "@/app/components/dashboard/project-panel";
 import { cookies } from "next/headers";
@@ -13,19 +13,7 @@ import { AXIOM_ACCESS_TOKEN_COOKIE } from "@/server/auth/session";
 import { verifyAccessToken } from "@/server/auth/verify";
 import { resolveUserEntitlementState } from "@/server/entitlements/service";
 
-type WorkspacePageProps = {
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
-};
-
-export default async function WorkspacePage({
-  searchParams,
-}: WorkspacePageProps) {
-  const resolvedSearchParams = searchParams ? await searchParams : {};
-  const billingStatus = resolvedSearchParams.billing;
-  const billingValue = Array.isArray(billingStatus)
-    ? billingStatus[0]
-    : billingStatus;
-
+export default async function WorkspacePage() {
   const fallback = await resolveUserEntitlementState("workspace-user");
 
   let snapshot = fallback;
@@ -35,18 +23,21 @@ export default async function WorkspacePage({
     const verified = accessToken ? await verifyAccessToken(accessToken) : null;
 
     if (verified) {
-      snapshot = await resolveUserEntitlementState(verified.id);
+      const inferredRole = verified.email?.endsWith("@imdev.studio")
+        ? "admin"
+        : "user";
+      snapshot = await resolveUserEntitlementState(verified.id, inferredRole);
     }
   } catch {
     snapshot = fallback;
   }
 
   return (
-    <DashboardShell billingSignal={billingValue}>
+    <DashboardShell>
       <header style={{ marginBottom: "1.25rem" }}>
         <span className="pill">Axiom Workspace</span>
         <h1 style={{ margin: "0.75rem 0 0.35rem", fontSize: "2rem" }}>
-          AI Operating System Control Plane
+          AI Operations Demo Control Plane
         </h1>
         <p className="muted" style={{ maxWidth: 740, margin: 0 }}>
           Protected workspace for orchestrating agents, approvals, memory, and
@@ -81,8 +72,8 @@ export default async function WorkspacePage({
         ) : (
           <FeatureLock
             title="Memory and Knowledge"
-            description="Long-term memory is available on trial or premium plans."
-            recommendedPlan="premium"
+            description="Long-term memory is gated for free demo users."
+            recommendedPlan="pro"
           />
         )}
         {snapshot.features["connectors.premium"] ? (
@@ -90,22 +81,16 @@ export default async function WorkspacePage({
         ) : (
           <FeatureLock
             title="Connectors and Settings"
-            description="Premium connectors are locked on free access."
+            description="Connector features are available only for internal access."
             recommendedPlan="pro"
           />
         )}
       </section>
 
-      <section className="grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
+      <section className="grid" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
         <AccessStatePanel snapshot={snapshot} />
         <PermissionPanel />
-      </section>
-
-      <section
-        className="grid"
-        style={{ gridTemplateColumns: "1fr", marginTop: "1rem" }}
-      >
-        <BillingPanel billingSignal={billingValue} />
+        <ObservabilityPanel />
       </section>
     </DashboardShell>
   );

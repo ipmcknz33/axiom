@@ -16,12 +16,8 @@ export type AccessSnapshot = {
   canUpgrade: boolean;
   expiresAt?: string;
   features: Record<AccessFeatureKey, boolean>;
-  lastStripeEventId?: string;
   plan: AccessPlan;
   role: AccessRole;
-  stripeCustomerId?: string;
-  stripeSubscriptionId?: string;
-  stripeReady: boolean;
   trialDaysRemaining?: number;
   trialExpired: boolean;
   updatedAt?: string;
@@ -120,12 +116,9 @@ function normalizePlan(input: {
 export function resolveAccessSnapshot(input: {
   accessStatus?: AccessStatus;
   billingStatus?: string;
-  lastStripeEventId?: string;
   now?: Date;
   plan?: AccessPlan;
   role: AccessRole;
-  stripeCustomerId?: string;
-  stripeSubscriptionId?: string;
   trialEndsAt?: string;
   trialStartedAt?: string;
   updatedAt?: string;
@@ -139,12 +132,8 @@ export function resolveAccessSnapshot(input: {
       billingStatus: input.billingStatus,
       canUpgrade: true,
       features: cloneFeatures("free"),
-      lastStripeEventId: input.lastStripeEventId,
       plan: "free",
       role: input.role,
-      stripeCustomerId: input.stripeCustomerId,
-      stripeReady: !!input.stripeCustomerId,
-      stripeSubscriptionId: input.stripeSubscriptionId,
       trialExpired: true,
       updatedAt: input.updatedAt,
       userId: input.userId,
@@ -157,12 +146,8 @@ export function resolveAccessSnapshot(input: {
       billingStatus: input.billingStatus,
       canUpgrade: false,
       features: cloneFeatures("business"),
-      lastStripeEventId: input.lastStripeEventId,
       plan: "business",
       role: input.role,
-      stripeCustomerId: input.stripeCustomerId,
-      stripeReady: true,
-      stripeSubscriptionId: input.stripeSubscriptionId,
       trialExpired: false,
       updatedAt: input.updatedAt,
       userId: input.userId,
@@ -182,12 +167,8 @@ export function resolveAccessSnapshot(input: {
     canUpgrade: normalized.plan === "free" || normalized.plan === "trial",
     expiresAt: normalized.expiresAt,
     features: cloneFeatures(normalized.plan),
-    lastStripeEventId: input.lastStripeEventId,
     plan: normalized.plan,
     role: input.role,
-    stripeCustomerId: input.stripeCustomerId,
-    stripeReady: !!input.stripeCustomerId || normalized.plan !== "free",
-    stripeSubscriptionId: input.stripeSubscriptionId,
     trialDaysRemaining: normalized.trialDaysRemaining,
     trialExpired: normalized.trialExpired,
     updatedAt: input.updatedAt,

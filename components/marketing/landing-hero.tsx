@@ -6,8 +6,8 @@ export function LandingHero() {
     >
       <div className="pill">Axiom Premium</div>
       <h1 style={{ fontSize: "2.25rem", margin: "0.7rem 0" }}>
-        Build safer AI operations with approvals, memory, and monetization in
-        one control plane.
+        Build safer AI operations with approvals, memory, and capability
+        controls in one control plane.
       </h1>
       <p className="muted" style={{ lineHeight: 1.6, maxWidth: 760 }}>
         Route work across specialized agents, enforce high-risk approvals, and
@@ -23,7 +23,7 @@ export function LandingHero() {
         }}
       >
         <a className="pill" href="/signin" style={{ textDecoration: "none" }}>
-          Sign in with Google
+          Request Access
         </a>
         <a href="/app" style={{ textDecoration: "none", color: "var(--text)" }}>
           Enter Workspace

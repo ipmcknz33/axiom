@@ -14,8 +14,6 @@ Establish a production-grade foundation for a modular AI operating system with s
 
 ## API-first phase 1 endpoints
 
-- `GET /api/v1/auth/google/start`: starts Google OAuth and redirects to provider login.
-- `GET /api/v1/auth/callback`: exchanges OAuth code, sets access/refresh session cookies, and redirects to protected workspace.
 - `POST /api/v1/auth/signout`: clears access/refresh session cookies and redirects to sign-in page.
 - `GET /api/v1/auth/session`: verifies current access token and returns authenticated user state for app-shell checks.
 - `POST /api/v1/chat`: validates auth headers and orchestrator payload, enforces caller identity, emits audit events, and returns either dispatch intent or a pending approval response.
@@ -23,9 +21,10 @@ Establish a production-grade foundation for a modular AI operating system with s
 - `GET /api/v1/connectors`: lists connector templates.
 - `GET /api/v1/approvals`: authenticated approval queue endpoint backed by persisted records; owners can view their queue and admins can inspect any queue.
 - `GET /api/v1/access`: centralized access/entitlement snapshot endpoint for role-aware plan, feature, and limit checks.
-- `POST /api/billing/checkout-session`: authenticated Stripe checkout session creation for premium/pro/business upgrades.
-- `POST /api/v1/billing/webhooks/stripe`: webhook-ready billing ingress scaffold for idempotent subscription sync flows.
-- `POST /api/webhooks/stripe`: verified Stripe webhook ingestion endpoint with signature validation and idempotent transition processing.
+- `GET /api/v1/entitlements/snapshot`: lightweight authenticated entitlement snapshot endpoint for demo shell gating.
+- `POST /api/v1/rag/ingest`: authenticated RAG ingestion endpoint for document indexing.
+- `POST /api/v1/ai/query`: authenticated orchestration pipeline endpoint with retrieval-augmented responses.
+- `GET /api/v1/ai/metrics`: authenticated telemetry endpoint exposing AI runtime summary metrics and recent runs.
 - `GET /api/v1/projects`, `/tasks`, `/memory`: scaffolds to anchor phase 2 implementation.
 - `GET /api/v1/health`: readiness endpoint returning env + database check details and HTTP `503` when degraded.
 
@@ -37,7 +36,7 @@ Establish a production-grade foundation for a modular AI operating system with s
 - Browser session gating is enforced for workspace routes via verified Supabase access tokens in httpOnly cookies.
 - Payload `userId` must match the authenticated caller before orchestration dispatch is allowed.
 - `requestedAction` is prechecked against high-risk policy rules and routed to pending approval when matched.
-- Billing and access controls are centralized via plan/entitlement contracts so premium gating is not scattered across routes/components.
+- Access controls are centralized in shared entitlement contracts so feature gating is not scattered across routes/components.
 - Approval requests and audit events are persisted through Supabase-backed repositories.
 - Audit events are standardized as `allowed`, `denied`, or `pending_approval` before any orchestration handoff.
 - Route authorization decisions are centralized in reusable security policy modules for deterministic, testable access outcomes.
@@ -60,12 +59,9 @@ Establish a production-grade foundation for a modular AI operating system with s
 - `server/audit/repository.ts` persists audit telemetry against `public.audit_logs`.
 - Service layers map database rows into stable domain contracts for routes and orchestrator handoff.
 
-## Access and monetization foundation
+## Access foundation
 
 - `db/migrations/0002_access_billing.sql` adds billing primitives (plans, subscriptions, entitlement overrides, usage events) and RLS seeds for ownership-based access.
-- `server/billing/contracts.ts` defines centralized billing domain primitives: `Plan`, `FeatureKey`, `UsageMetric`, and `EntitlementSnapshot`.
-- `server/billing/entitlements.ts` resolves free/trial/pro/business/internal entitlements with trial-expiry downgrade behavior and explicit internal bypass rules.
-- `server/billing/repository.ts` provides a single state-loading path for active subscription, feature overrides, and usage counters.
 - `lib/entitlements/access.ts` provides an app-shell focused access model with free/trial/premium/pro/business tiers, owner/internal override path, and 3-day trial handling.
 - `GET /api/v1/access` is the centralized entitlement contract for UI/API consumers to prevent scattered feature gating logic.
 
@@ -82,34 +78,44 @@ Establish a production-grade foundation for a modular AI operating system with s
   - `GET /api/v1/memory` -> `memory.long_term`
 - `/app` shell renders lock/unlock states through `app/components/access/feature-lock.tsx` based on resolved access state.
 
-## Phase 1.9 webhook and billing transitions foundation
+## Demo entitlement model
 
-- `db/migrations/0003_billing_webhooks.sql` adds `billing_webhook_events` for webhook idempotency and extends `account_entitlements` with billing lifecycle metadata.
-- `lib/stripe/env.ts` centralizes Stripe server-only env loading (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, optional plan price IDs).
-- `server/billing/stripe/signature.ts` verifies Stripe signatures using HMAC SHA-256 and timing-safe comparison.
-- `server/billing/stripe/plan-mapping.ts` centralizes plan -> price and price -> plan mapping for checkout creation and webhook reconciliation.
-- `server/billing/stripe/mapping.ts` maps supported Stripe events into normalized entitlement transitions.
-- `server/billing/stripe/processor.ts` executes begin -> map -> apply -> finalize workflow and dedupes duplicate event IDs.
-- `server/billing/repository.ts` persists webhook event status (`processing|processed|failed|ignored`) and applies mapped transitions into `account_entitlements`.
-
-## Phase 2.0 checkout activation
-
-- `app/components/access/upgrade-button.tsx` provides reusable, actionable upgrade triggers from shell surfaces.
-- Access panel and feature lock cards now call `POST /api/billing/checkout-session` and redirect to Stripe Checkout.
-- `/app` handles return-state banners via `?billing=success|canceled` query params after checkout redirects.
+- Entitlements are intentionally minimal in the demo shell: `free` and role-based `internal` override.
+- `admin` and `service` authenticated roles resolve to internal-access snapshots with all features enabled.
+- `user` role resolves to free access with `coming_soon` status and gated premium features.
+- No checkout, subscription, external billing events, or webhook dependency exists in the active entitlement path.
 
 ## Auth and route protection
 
 - Marketing and onboarding are separated from product workspace: `/` (landing), `/signin` (auth entry), `/app` (protected control plane).
-- OAuth utilities are centralized under `server/auth/` and reusable across route handlers.
+- Runtime auth is session/header-context based for private demo access.
 - Middleware preserves path telemetry headers while enforcing token verification-based access control for `/app`.
 - Session lifecycle uses dual cookies (`axiom_access_token`, `axiom_refresh_token`) with centralized set/get/clear helpers.
 
 ## Phase 1.7 protected shell
 
 - `/app` now acts as a premium shell with side navigation, advisor/dashboard composition, and centralized access-state presentation.
-- Access and upgrade messaging is driven from shared entitlement snapshots, including trial and locked-state semantics.
+- Access state messaging is driven from shared entitlement snapshots, including locked-state semantics for demo users.
 - Permission explainability panels establish a foundation for high-risk capability consent UX.
+
+## AI assistant system
+
+- `app/components/assistant/ai-assistant.tsx` provides a persistent floating assistant mounted at the root layout level, visible on every page.
+- The assistant bubble sits bottom-right with a pulse-glow idle animation; clicking toggles a slide-in panel.
+- Conversation history is persisted to `localStorage` under `axiom_assistant_messages` and survives full page reloads.
+- Assistant prompts now call `/api/v1/ai/query`, which routes to the orchestrator and injects retrieved context from the in-memory RAG store.
+- Response routing is intent-based with four delegation roles: `orchestrator`, `research`, `builder`, and `debugger`.
+- Suggestion chips provide one-click access to common intents: summarize priorities, automate reporting, review approvals.
+- Thinking state renders a three-dot blink animation while a response is being produced.
+- Inspector mode displays per-run metadata including prompt normalization, selected agent, token estimate, latency, cache-hit status, and retrieval context count.
+
+## RAG and observability runtime
+
+- `server/rag/store.ts` provides ingestion, deterministic hashed embeddings, cosine retrieval, and bounded query-level retrieval cache.
+- Runtime state is attached to `globalThis` for stable behavior during local hot reloads.
+- `server/ai/orchestrator.ts` runs the query pipeline: delegation, retrieval, synthesis, and run metadata shaping.
+- `server/ai/telemetry.ts` tracks bounded run history and aggregate metrics (`requestCount`, `avgLatencyMs`, `totalTokens`, `cacheHitRate`, `errorCount`).
+- `app/components/dashboard/observability-panel.tsx` surfaces metrics and recent run snapshots in the workspace shell.
 
 ## Planned phase 2 evolution
 
@@ -117,3 +123,4 @@ Establish a production-grade foundation for a modular AI operating system with s
 - Add full RLS policy matrix and tenant-aware permission model.
 - Add connector OAuth flows and encrypted credential vault integration.
 - Implement vector retrieval + memory ranking service.
+- Connect assistant to live orchestrator API for real dispatch and response streaming.

@@ -9,7 +9,7 @@ export function ConnectorPanel() {
       <ul
         style={{ margin: "0.9rem 0 0", paddingLeft: "1.2rem", lineHeight: 1.7 }}
       >
-        <li>Google, email, calendar, docs</li>
+        <li>Email, calendar, docs</li>
         <li>Finance/API adapters (approval-gated)</li>
         <li>Premium connector unlock via access snapshot</li>
       </ul>

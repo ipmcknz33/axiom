@@ -1,34 +1,30 @@
 import type { AccessSnapshot } from "@/lib/entitlements/access";
-import { UpgradeButton } from "@/app/components/access/upgrade-button";
 
 type AccessStatePanelProps = {
   snapshot: AccessSnapshot;
 };
 
 export function AccessStatePanel({ snapshot }: AccessStatePanelProps) {
+  const featureRows = Object.entries(snapshot.features);
+
   return (
     <div className="panel">
-      <h3 style={{ marginTop: 0 }}>Access and Upgrade</h3>
+      <h3 style={{ marginTop: 0 }}>Access State</h3>
       <p className="muted" style={{ marginTop: "0.4rem" }}>
         Plan {snapshot.plan.toUpperCase()} · Role {snapshot.role.toUpperCase()}{" "}
         · Status {snapshot.accessStatus.toUpperCase()}
       </p>
-      {snapshot.trialDaysRemaining !== undefined ? (
+      {snapshot.billingStatus ? (
         <p className="muted" style={{ marginTop: "0.4rem" }}>
-          Trial days remaining: {snapshot.trialDaysRemaining}
-        </p>
-      ) : null}
-      {snapshot.trialExpired ? (
-        <p style={{ color: "#fca5a5", marginTop: "0.4rem" }}>
-          Trial expired. Some premium features are locked.
+          Entitlement mode: {snapshot.billingStatus}
         </p>
       ) : null}
       <p className="muted" style={{ marginTop: "0.4rem" }}>
-        Stripe ready: {snapshot.stripeReady ? "yes" : "no"}
+        Demo mode only. Checkout and subscriptions are intentionally disabled.
       </p>
 
       <div style={{ marginTop: "0.9rem", display: "grid", gap: "0.45rem" }}>
-        {Object.entries(snapshot.features).map(([feature, enabled]) => (
+        {featureRows.map(([feature, enabled]) => (
           <div key={feature} className="feature-row">
             <span>{feature}</span>
             <span className={enabled ? "feature-on" : "feature-off"}>
@@ -37,22 +33,6 @@ export function AccessStatePanel({ snapshot }: AccessStatePanelProps) {
           </div>
         ))}
       </div>
-
-      {snapshot.canUpgrade ? (
-        <div style={{ marginTop: "0.9rem" }}>
-          <div className="upgrade-grid">
-            <UpgradeButton plan="premium" text="Upgrade to Premium" />
-            <UpgradeButton plan="pro" text="Upgrade to Pro" />
-            <UpgradeButton plan="business" text="Upgrade to Business" />
-          </div>
-          {!snapshot.stripeReady ? (
-            <p className="muted" style={{ marginTop: "0.5rem" }}>
-              Billing setup pending. Configure Stripe env values to enable
-              checkout.
-            </p>
-          ) : null}
-        </div>
-      ) : null}
     </div>
   );
 }

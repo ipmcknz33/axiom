@@ -1,30 +1,49 @@
-import {
-  resolveAccessSnapshot,
-  type AccessSnapshot,
-} from "@/lib/entitlements/access";
-import {
-  createDefaultTrialEntitlement,
-  getAccountEntitlement,
-} from "@/server/entitlements/repository";
+import type { AccessSnapshot } from "@/lib/entitlements/access";
+import type { AxiomRole } from "@/server/security/auth";
 
 export async function resolveUserEntitlementState(
   userId: string,
+  role: AxiomRole = "user",
 ): Promise<AccessSnapshot> {
-  const row =
-    (await getAccountEntitlement(userId)) ??
-    (await createDefaultTrialEntitlement(userId));
+  const now = new Date().toISOString();
 
-  return resolveAccessSnapshot({
-    accessStatus: row.access_status,
-    billingStatus: row.billing_status ?? undefined,
-    lastStripeEventId: row.last_stripe_event_id ?? undefined,
-    plan: row.plan,
-    role: row.role,
-    stripeCustomerId: row.stripe_customer_id ?? undefined,
-    stripeSubscriptionId: row.stripe_subscription_id ?? undefined,
-    trialEndsAt: row.trial_ends_at ?? undefined,
-    trialStartedAt: row.trial_started_at ?? undefined,
-    updatedAt: row.updated_at,
+  if (role === "admin" || role === "service") {
+    return {
+      accessStatus: "active",
+      billingStatus: "internal",
+      canUpgrade: false,
+      features: {
+        "advisor.advanced": true,
+        "agents.advanced": true,
+        "connectors.premium": true,
+        "memory.long_term": true,
+        "permissions.explainability": true,
+        "projects.unlimited": true,
+      },
+      plan: "business",
+      role: "internal",
+      trialExpired: false,
+      updatedAt: now,
+      userId,
+    };
+  }
+
+  return {
+    accessStatus: "active",
+    billingStatus: "coming_soon",
+    canUpgrade: false,
+    features: {
+      "advisor.advanced": false,
+      "agents.advanced": false,
+      "connectors.premium": false,
+      "memory.long_term": false,
+      "permissions.explainability": true,
+      "projects.unlimited": false,
+    },
+    plan: "free",
+    role: "member",
+    trialExpired: false,
+    updatedAt: now,
     userId,
-  });
+  };
 }
