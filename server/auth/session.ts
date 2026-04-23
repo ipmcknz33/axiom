@@ -44,18 +44,26 @@ export function clearSessionCookies(response: NextResponse) {
   response.cookies.delete(AXIOM_REFRESH_TOKEN_COOKIE);
 }
 
+function readCookieFromHeader(
+  request: NextRequest | Request,
+  name: string,
+): string | null {
+  const headers: Headers = (request as Request).headers;
+  const cookieHeader = headers.get("cookie") ?? "";
+  const pair = cookieHeader
+    .split(";")
+    .map((part: string) => part.trim())
+    .find((part: string) => part.startsWith(`${name}=`));
+
+  return pair ? pair.slice(name.length + 1) : null;
+}
+
 export function getAccessTokenFromRequest(request: NextRequest | Request) {
   if ("cookies" in request && request.cookies?.get) {
     return request.cookies.get(AXIOM_ACCESS_TOKEN_COOKIE)?.value ?? null;
   }
 
-  const cookieHeader = request.headers.get("cookie") ?? "";
-  const pair = cookieHeader
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(`${AXIOM_ACCESS_TOKEN_COOKIE}=`));
-
-  return pair ? pair.slice(AXIOM_ACCESS_TOKEN_COOKIE.length + 1) : null;
+  return readCookieFromHeader(request, AXIOM_ACCESS_TOKEN_COOKIE);
 }
 
 export function getRefreshTokenFromRequest(request: NextRequest | Request) {
@@ -63,11 +71,5 @@ export function getRefreshTokenFromRequest(request: NextRequest | Request) {
     return request.cookies.get(AXIOM_REFRESH_TOKEN_COOKIE)?.value ?? null;
   }
 
-  const cookieHeader = request.headers.get("cookie") ?? "";
-  const pair = cookieHeader
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(`${AXIOM_REFRESH_TOKEN_COOKIE}=`));
-
-  return pair ? pair.slice(AXIOM_REFRESH_TOKEN_COOKIE.length + 1) : null;
+  return readCookieFromHeader(request, AXIOM_REFRESH_TOKEN_COOKIE);
 }
