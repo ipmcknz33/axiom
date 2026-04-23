@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { generateEmbedding } from "@/server/ai/provider";
 
 export type RagDocumentInput = {
   id: string;
@@ -35,6 +36,7 @@ export type RagRetrievalResult = {
 export type RagStats = {
   cacheEntries: number;
   documents: number;
+  embeddingsMode: "openai" | "deterministic";
   isSeeded: boolean;
   chunks: number;
   mode: "memory" | "postgres";
@@ -54,6 +56,7 @@ type RagQueryCacheEntry = {
 
 type RagRuntimeState = {
   chunks: RagChunk[];
+  embeddingsMode: "openai" | "deterministic";
   queryCache: Map<string, RagQueryCacheEntry>;
   mode: "memory" | "postgres";
   seeded: boolean;
@@ -103,6 +106,7 @@ function getRuntimeState(): RagRuntimeState {
   if (!globalThis.__axiomRagState) {
     globalThis.__axiomRagState = {
       chunks: [],
+      embeddingsMode: "deterministic",
       queryCache: new Map<string, RagQueryCacheEntry>(),
       mode: "memory",
       seeded: false,
@@ -243,15 +247,20 @@ async function ingestToPostgres(
 ): Promise<boolean> {
   try {
     const supabase = createSupabaseServerClient();
-    const rows = documents.map((doc) => ({
-      id: doc.id,
-      title: doc.title,
-      content: doc.content,
-      source: doc.source ?? null,
-      metadata: doc.metadata ?? {},
-      embedding: toVectorLiteral(buildEmbedding(doc.content)),
-      updated_at: new Date().toISOString(),
-    }));
+    const rowsPromises = documents.map(async (doc) => {
+      const { embedding, mode } = await generateEmbedding(doc.content);
+      getRuntimeState().embeddingsMode = mode;
+      return {
+        id: doc.id,
+        title: doc.title,
+        content: doc.content,
+        source: doc.source ?? null,
+        metadata: doc.metadata ?? {},
+        embedding: toVectorLiteral(embedding),
+        updated_at: new Date().toISOString(),
+      };
+    });
+    const rows = await Promise.all(rowsPromises);
 
     const { error } = await (supabase.from("rag_documents") as any).upsert(
       rows,
@@ -371,9 +380,10 @@ async function retrieveFromPostgres(input: {
 function retrieveFromMemory(input: {
   query: string;
   topK: number;
+  queryEmbedding?: number[];
 }): RagRetrievalItem[] {
   const state = getRuntimeState();
-  const queryEmbedding = buildEmbedding(input.query);
+  const queryEmbedding = input.queryEmbedding ?? buildEmbedding(input.query);
   return state.chunks
     .map((chunk) => ({
       id: chunk.id,
@@ -412,9 +422,23 @@ export async function retrieveRelevantChunks(input: {
     metadataFilter: input.metadataFilter,
   });
 
-  const ranked =
-    postgresItems ?? retrieveFromMemory({ query: normalizedQuery, topK });
-  state.mode = postgresItems ? "postgres" : "memory";
+  // For memory retrieval, use live embeddings when available
+  let ranked: RagRetrievalItem[];
+  if (postgresItems) {
+    ranked = postgresItems;
+    state.mode = "postgres";
+  } else {
+    // Build query embedding via provider (live or deterministic)
+    const { embedding: queryEmbedding, mode: embMode } =
+      await generateEmbedding(normalizedQuery);
+    state.embeddingsMode = embMode;
+    ranked = retrieveFromMemory({
+      query: normalizedQuery,
+      topK,
+      queryEmbedding,
+    });
+    state.mode = "memory";
+  }
 
   const entry: RagQueryCacheEntry = {
     items: ranked,
@@ -436,6 +460,7 @@ export function getRagStats(): RagStats {
   return {
     cacheEntries: state.queryCache.size,
     documents: state.chunks.length,
+    embeddingsMode: state.embeddingsMode,
     isSeeded: state.seeded,
     chunks: state.chunks.length,
     mode: state.mode,

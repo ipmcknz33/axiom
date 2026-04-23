@@ -12,7 +12,10 @@ type InspectorPayload = {
   contextCount: number;
   estimatedCostUsd: number;
   latencyMs: number;
+  llmMode?: "openai" | "stub";
+  llmModel?: string;
   normalizedQuery: string;
+  ragMode?: "memory" | "postgres";
   ragUsed: boolean;
   runId: string;
   specializationHint?: string;
@@ -414,7 +417,18 @@ export function AiAssistant() {
                   <p className="muted" style={{ margin: "0.35rem 0 0" }}>
                     cache {latestAssistant.inspector.cacheHit ? "hit" : "miss"}{" "}
                     | rag {latestAssistant.inspector.ragUsed ? "used" : "none"}
+                    {latestAssistant.inspector.ragMode
+                      ? ` (${latestAssistant.inspector.ragMode})`
+                      : ""}
                   </p>
+                  {latestAssistant.inspector.llmMode ? (
+                    <p className="muted" style={{ margin: "0.35rem 0 0" }}>
+                      llm: {latestAssistant.inspector.llmMode}
+                      {latestAssistant.inspector.llmModel
+                        ? ` — ${latestAssistant.inspector.llmModel}`
+                        : ""}
+                    </p>
+                  ) : null}
                   <p className="muted" style={{ margin: "0.35rem 0 0" }}>
                     path: {latestAssistant.inspector.agentPath.join(" -> ")}
                   </p>

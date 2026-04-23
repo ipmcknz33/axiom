@@ -6,8 +6,11 @@ export type PipelineRunRecord = {
   estimatedCostUsd: number;
   error?: string;
   latencyMs: number;
+  llmMode: "openai" | "stub";
+  llmModel: string;
   normalizedQuery: string;
   query: string;
+  ragMode: "memory" | "postgres";
   ragUsed: boolean;
   runId: string;
   timestamp: string;

@@ -1,7 +1,11 @@
 import { END, START, StateGraph } from "@/server/ai/langgraph-runtime";
+import {
+  generateChatCompletion,
+  getProviderStatus,
+} from "@/server/ai/provider";
+import { buildTraceUrl, endTrace, startTrace } from "@/server/ai/tracing";
 import { trackRun } from "@/server/ai/telemetry";
-import { retrieveRelevantChunks } from "@/server/rag/store";
-import { getObservabilityConfig } from "@/server/observability/config";
+import { getRagStats, retrieveRelevantChunks } from "@/server/rag/store";
 
 type AgentRole = "orchestrator" | "research" | "builder" | "debugger";
 
@@ -25,7 +29,10 @@ export type QueryPipelineOutput = {
   }>;
   estimatedCostUsd: number;
   latencyMs: number;
+  llmMode: "openai" | "stub";
+  llmModel: string;
   normalizedQuery: string;
+  ragMode: "pgvector" | "memory";
   ragUsed: boolean;
   response: string;
   runId: string;
@@ -45,6 +52,8 @@ type PipelineState = {
     title: string;
     content: string;
   }>;
+  llmMode: "openai" | "stub";
+  llmModel: string;
   normalizedQuery: string;
   query: string;
   response: string;
@@ -166,15 +175,34 @@ export async function runQueryPipeline(
         normalizedQuery: retrieval.normalizedQuery,
       };
     })
-    .addNode("respond", (state) => ({
-      ...state,
-      agentPath: [...state.agentPath, "respond"],
-      response: buildAgentResponse({
-        agent: state.agent,
-        query: state.query,
-        context: state.context,
-      }),
-    }))
+    .addNode("respond", async (state) => {
+      const contextHint =
+        state.context.length > 0
+          ? state.context
+              .map((item) => `${item.title}: ${item.content}`)
+              .join("\n\n")
+          : undefined;
+      const completion = await generateChatCompletion(
+        [{ role: "user", content: state.query }],
+        contextHint,
+      );
+      // If the provider is in stub mode, enrich the response with agent/context metadata
+      const response =
+        completion.mode === "stub"
+          ? buildAgentResponse({
+              agent: state.agent,
+              query: state.query,
+              context: state.context,
+            })
+          : completion.text;
+      return {
+        ...state,
+        agentPath: [...state.agentPath, "respond"],
+        llmMode: completion.mode,
+        llmModel: completion.model,
+        response,
+      };
+    })
     .addEdge(START, "normalize")
     .addEdge("normalize", "route")
     .addEdge("route", "retrieve")
@@ -182,11 +210,22 @@ export async function runQueryPipeline(
     .addEdge("respond", END)
     .compile();
 
+  await startTrace({
+    runId,
+    name: "axiom-query-pipeline",
+    runType: "chain",
+    inputs: { query: input.query, userId: input.userId },
+    startedAt,
+    tags: ["orchestrator"],
+  });
+
   const finalState = await graph.invoke({
     agent: "orchestrator",
     agentPath: [],
     cacheHit: false,
     context: [],
+    llmMode: "stub",
+    llmModel: "stub",
     normalizedQuery: "",
     query: input.query,
     response: "",
@@ -203,7 +242,20 @@ export async function runQueryPipeline(
   )
     ? "This looks workflow-specific. Consider creating a dedicated bot for this recurring task."
     : undefined;
-  const traceUrl = getObservabilityConfig().buildTraceUrl(runId);
+  const traceUrl = buildTraceUrl(runId);
+  const ragStats = getRagStats();
+  const providerStatus = getProviderStatus();
+
+  await endTrace({
+    runId,
+    outputs: {
+      agent: finalState.agent,
+      response: finalState.response,
+      ragUsed: finalState.context.length > 0,
+      latencyMs,
+    },
+    endedAt: Date.now(),
+  });
 
   trackRun({
     agent: finalState.agent,
@@ -212,8 +264,11 @@ export async function runQueryPipeline(
     contextCount: finalState.context.length,
     estimatedCostUsd,
     latencyMs,
+    llmMode: finalState.llmMode,
+    llmModel: finalState.llmModel,
     normalizedQuery: finalState.normalizedQuery,
     query: input.query,
+    ragMode: ragStats.mode,
     ragUsed: finalState.context.length > 0,
     runId,
     timestamp: new Date().toISOString(),
@@ -235,7 +290,10 @@ export async function runQueryPipeline(
     })),
     estimatedCostUsd,
     latencyMs,
+    llmMode: finalState.llmMode,
+    llmModel: finalState.llmModel,
     normalizedQuery: finalState.normalizedQuery,
+    ragMode: ragStats.mode === "postgres" ? "pgvector" : "memory",
     ragUsed: finalState.context.length > 0,
     response: finalState.response,
     runId,
@@ -243,4 +301,6 @@ export async function runQueryPipeline(
     tokenEstimate,
     traceUrl,
   };
+
+  void providerStatus; // referenced to avoid unused-var lint error
 }

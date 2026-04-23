@@ -17,8 +17,11 @@ type MetricsPayload = {
     contextCount: number;
     estimatedCostUsd: number;
     latencyMs: number;
+    llmMode?: "openai" | "stub";
+    llmModel?: string;
     normalizedQuery: string;
     query: string;
+    ragMode?: "memory" | "postgres";
     ragUsed: boolean;
     runId: string;
     timestamp: string;
@@ -37,6 +40,14 @@ type MetricsPayload = {
   };
 };
 
+type RuntimePayload = {
+  llm: { mode: string; model: string; isLive: boolean };
+  embeddings: { mode: string; model: string };
+  rag: { backendMode: string; embeddingsMode: string; isSeeded: boolean; chunks: number };
+  tracing: { mode: string; project: string; isEnabled: boolean };
+  keysPresent: { OPENAI_API_KEY: boolean; LANGSMITH_API_KEY: boolean };
+};
+
 const DEMO_HEADERS = {
   "x-axiom-role": "admin",
   "x-axiom-user-id": "11111111-1111-4111-8111-111111111111",
@@ -48,27 +59,35 @@ export function ObservabilityPanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<MetricsPayload | null>(null);
+  const [runtime, setRuntime] = useState<RuntimePayload | null>(null);
 
   const loadMetrics = useCallback(async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch("/api/v1/ai/metrics", {
-        headers: DEMO_HEADERS,
-        method: "GET",
-      });
+      const [metricsRes, runtimeRes] = await Promise.all([
+        fetch("/api/v1/ai/metrics", { headers: DEMO_HEADERS, method: "GET" }),
+        fetch("/api/v1/ai/runtime", { headers: DEMO_HEADERS, method: "GET" }),
+      ]);
 
-      const payload = (await response.json()) as {
+      const metricsPayload = (await metricsRes.json()) as {
         data?: MetricsPayload;
         error?: { message?: string };
       };
 
-      if (!response.ok || !payload.data) {
-        throw new Error(payload.error?.message ?? "Unable to load metrics.");
+      if (!metricsRes.ok || !metricsPayload.data) {
+        throw new Error(metricsPayload.error?.message ?? "Unable to load metrics.");
       }
 
-      setMetrics(payload.data);
+      setMetrics(metricsPayload.data);
+
+      if (runtimeRes.ok) {
+        const runtimePayload = (await runtimeRes.json()) as {
+          data?: RuntimePayload;
+        };
+        if (runtimePayload.data) setRuntime(runtimePayload.data);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load metrics.");
     } finally {
@@ -135,6 +154,14 @@ export function ObservabilityPanel() {
         {metrics?.rag.mode ?? "memory"}
       </p>
 
+      {runtime ? (
+        <p className="muted" style={{ marginTop: "0.5rem" }}>
+          runtime — llm: {runtime.llm.mode} ({runtime.llm.model}) | embeddings:
+          {" "}{runtime.embeddings.mode} | rag: {runtime.rag.backendMode} | tracing:
+          {" "}{runtime.tracing.mode}
+        </p>
+      ) : null}
+
       {error ? <p className="upgrade-error">{error}</p> : null}
 
       <div className="observability-runs" style={{ marginTop: "0.85rem" }}>
@@ -165,6 +192,14 @@ export function ObservabilityPanel() {
                 tokens {run.tokenEstimate} | cost $
                 {run.estimatedCostUsd.toFixed(6)}
               </p>
+              {(run.llmMode || run.ragMode) ? (
+                <p className="muted" style={{ margin: "0.25rem 0 0" }}>
+                  {run.llmMode ? `llm: ${run.llmMode}` : ""}
+                  {run.llmMode && run.llmModel ? ` (${run.llmModel})` : ""}
+                  {run.llmMode && run.ragMode ? " | " : ""}
+                  {run.ragMode ? `rag: ${run.ragMode}` : ""}
+                </p>
+              ) : null}
               <p className="muted" style={{ margin: "0.25rem 0 0" }}>
                 path {run.agentPath.join(" -> ")}
               </p>
