@@ -15,6 +15,14 @@ const SYSTEM_HIGHLIGHTS = [
     label: "Observability",
     detail: "per-run latency, cost, agent path, cache status",
   },
+  {
+    label: "Bot Builder",
+    detail: "intent-driven bots wired to the orchestration graph",
+  },
+  {
+    label: "Workflow Engine",
+    detail: "multi-step automated workflows across specialized agents",
+  },
 ];
 
 const SIGNAL_CARDS = [
@@ -29,6 +37,39 @@ const TERMINAL_LINES = [
   { label: "route", text: "intent matched → builder agent selected" },
   { label: "retrieve", text: "pgvector RPC → 4 context docs (score 0.82)" },
   { label: "respond", text: "synthesis complete → 312 tokens" },
+];
+
+const IA_PAGES = [
+  {
+    href: "/app",
+    label: "Cockpit",
+    detail: "System status, signals, quick actions",
+  },
+  {
+    href: "/app/bots",
+    label: "Bots",
+    detail: "Create and monitor autonomous bots",
+  },
+  {
+    href: "/app/workflows",
+    label: "Workflows",
+    detail: "Trigger multi-step agent workflows",
+  },
+  {
+    href: "/app/memory",
+    label: "Memory",
+    detail: "Ingest, retrieve, and inspect grounded knowledge",
+  },
+  {
+    href: "/app/observability",
+    label: "Observability",
+    detail: "Traces, latency, cost, cache hit rates",
+  },
+  {
+    href: "/app/maintenance",
+    label: "Maintenance",
+    detail: "Runtime checks, reseed, environment health",
+  },
 ];
 
 export function LandingHero() {
@@ -99,6 +140,44 @@ export function LandingHero() {
                 <span className="hero-terminal-node">{line.label}</span>
                 <span className="muted">{line.text}</span>
               </div>
+            ))}
+          </div>
+
+          {/* Product IA */}
+          <div style={{ marginTop: "1rem", display: "grid", gap: "0.4rem" }}>
+            <p
+              className="muted"
+              style={{
+                margin: "0 0 0.4rem",
+                fontSize: "0.72rem",
+                letterSpacing: "0.06em",
+              }}
+            >
+              PRODUCT PAGES
+            </p>
+            {IA_PAGES.map((page) => (
+              <a
+                key={page.href}
+                href={page.href}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  borderBottom: "1px dashed rgba(31,39,58,0.8)",
+                  paddingBottom: "0.35rem",
+                  gap: "0.5rem",
+                }}
+              >
+                <span style={{ fontSize: "0.85rem", fontWeight: 500 }}>
+                  {page.label}
+                </span>
+                <span
+                  className="muted"
+                  style={{ fontSize: "0.75rem", textAlign: "right" }}
+                >
+                  {page.detail}
+                </span>
+              </a>
             ))}
           </div>
         </div>

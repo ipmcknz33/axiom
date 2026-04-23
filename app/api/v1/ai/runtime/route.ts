@@ -3,8 +3,7 @@ import { getAuthContext } from "@/server/security/auth";
 import { getRagStats } from "@/server/rag/store";
 import { getTracingStatus } from "@/server/ai/tracing";
 import { getProviderStatus } from "@/server/ai/provider";
-import { createApiResponse, createApiError } from "@/lib/api/response";
-import { NextRequest } from "next/server";
+import { fail, ok } from "@/lib/api/response";
 
 /**
  * GET /api/v1/ai/runtime
@@ -12,13 +11,13 @@ import { NextRequest } from "next/server";
  * Returns the current runtime mode for LLM, RAG, embeddings, and tracing.
  * Visible in the observability panel. Admin/service only.
  */
-export async function GET(request: NextRequest) {
-  const auth = await getAuthContext(request);
-  if (!auth.ok) {
-    return createApiError(401, auth.error ?? "Unauthorized");
+export async function GET(request: Request) {
+  const auth = getAuthContext(request.headers);
+  if (!auth.success) {
+    return fail(auth.error, 401, "unauthenticated");
   }
-  if (auth.role !== "admin" && auth.role !== "service") {
-    return createApiError(403, "Forbidden");
+  if (auth.data.role !== "admin" && auth.data.role !== "service") {
+    return fail("Forbidden", 403, "forbidden");
   }
 
   const config = getAiConfig();
@@ -26,7 +25,7 @@ export async function GET(request: NextRequest) {
   const ragStats = getRagStats();
   const tracing = getTracingStatus();
 
-  return createApiResponse({
+  return ok({
     llm: {
       mode: provider.llm,
       model: provider.model,
@@ -47,7 +46,6 @@ export async function GET(request: NextRequest) {
       project: tracing.project,
       isEnabled: tracing.isEnabled,
     },
-    // surface for debugging: which env keys are present (never the values)
     keysPresent: {
       OPENAI_API_KEY: Boolean(config.llm.apiKey),
       LANGSMITH_API_KEY: Boolean(config.tracing.apiKey),

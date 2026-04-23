@@ -831,3 +831,99 @@ main {
         grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 }
+
+/* ── Workspace layout (protected /app shell) ──────────────────── */
+.workspace-layout {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.workspace-nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.65rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    background: rgba(9, 11, 16, 0.92);
+    backdrop-filter: blur(12px);
+    flex-shrink: 0;
+}
+
+.workspace-nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-shrink: 0;
+}
+
+.workspace-nav-title {
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.workspace-nav-links {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    flex: 1;
+}
+
+.workspace-nav-link {
+    font-size: 0.82rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    color: var(--muted);
+    transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+
+.workspace-nav-link:hover {
+    color: var(--text);
+    background: rgba(91, 140, 255, 0.1);
+    border-color: rgba(91, 140, 255, 0.3);
+}
+
+.workspace-body {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    flex: 1;
+    min-height: 0;
+}
+
+.workspace-main {
+    min-width: 0;
+    overflow-y: auto;
+}
+
+/* Tighten side nav inside workspace body */
+.workspace-body .shell-side {
+    position: sticky;
+    top: 0;
+    height: calc(100vh - 3.2rem);
+    overflow-y: auto;
+    padding: 1rem;
+    border-right: 1px solid var(--border);
+    background: rgba(16, 20, 32, 0.6);
+}
+
+@media (max-width: 900px) {
+    .workspace-body {
+        grid-template-columns: 1fr;
+    }
+
+    .workspace-body .shell-side {
+        position: static;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .workspace-nav-links {
+        display: none;
+    }
+}

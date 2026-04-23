@@ -1,126 +1,128 @@
+import Link from "next/link";
 import { AgentOverview } from "@/app/components/dashboard/agent-overview";
-import { DashboardShell } from "@/app/components/dashboard/dashboard-shell";
-import { FeatureLock } from "@/app/components/access/feature-lock";
-import { AccessStatePanel } from "@/app/components/dashboard/access-state-panel";
-import { BotCreationPanel } from "@/app/components/dashboard/bot-creation-panel";
-import { ChatPanel } from "@/app/components/dashboard/chat-panel";
-import { ConnectorPanel } from "@/app/components/dashboard/connector-panel";
 import { MemoryPanel } from "@/app/components/dashboard/memory-panel";
 import { ObservabilityPanel } from "@/app/components/dashboard/observability-panel";
-import { PermissionPanel } from "@/app/components/dashboard/permission-panel";
-import { ProjectPanel } from "@/app/components/dashboard/project-panel";
-import { cookies } from "next/headers";
-import { AXIOM_ACCESS_TOKEN_COOKIE } from "@/server/auth/session";
-import { verifyAccessToken } from "@/server/auth/verify";
-import { resolveUserEntitlementState } from "@/server/entitlements/service";
+import { MaintenancePanel } from "@/app/components/dashboard/maintenance-panel";
 
-export default async function WorkspacePage() {
-  const fallback = await resolveUserEntitlementState("workspace-user");
+const STATUS_CARDS = [
+  { label: "LLM", value: "Online", ok: true },
+  { label: "RAG", value: "Seeded", ok: true },
+  { label: "Tracing", value: "Active", ok: true },
+  { label: "Approvals", value: "Enforced", ok: true },
+];
 
-  let snapshot = fallback;
-  try {
-    const cookieStore = await cookies();
-    const accessToken = cookieStore.get(AXIOM_ACCESS_TOKEN_COOKIE)?.value;
-    const verified = accessToken ? await verifyAccessToken(accessToken) : null;
+const SIGNAL_CARDS = [
+  { label: "Active bots", value: "3" },
+  { label: "Workflows today", value: "12" },
+  { label: "Avg latency", value: "340ms" },
+  { label: "Cache hit rate", value: "61%" },
+];
 
-    if (verified) {
-      const inferredRole = verified.email?.endsWith("@imdev.studio")
-        ? "admin"
-        : "user";
-      snapshot = await resolveUserEntitlementState(verified.id, inferredRole);
-    }
-  } catch {
-    snapshot = fallback;
-  }
+const QUICK_LINKS = [
+  { href: "/app/bots", label: "Manage Bots" },
+  { href: "/app/workflows", label: "Run Workflow" },
+  { href: "/app/memory", label: "Browse Memory" },
+  { href: "/app/observability", label: "View Traces" },
+  { href: "/app/maintenance", label: "System Check" },
+];
 
+export default function CockpitPage() {
   return (
-    <DashboardShell>
-      <header style={{ marginBottom: "1.5rem" }}>
-        <div
+    <div style={{ padding: "1.5rem", display: "grid", gap: "1.25rem" }}>
+      <header>
+        <span className="pill workspace-header-pill">Cockpit</span>
+        <h1
           style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: "0.75rem",
+            margin: "0.5rem 0 0.3rem",
+            fontSize: "1.9rem",
+            letterSpacing: "-0.02em",
           }}
         >
-          <div>
-            <span className="pill workspace-header-pill">Axiom Workspace</span>
-            <h1
-              style={{
-                margin: "0.6rem 0 0.3rem",
-                fontSize: "2rem",
-                letterSpacing: "-0.02em",
-              }}
-            >
-              AI Operations Control Plane
-            </h1>
-            <p
-              className="muted"
-              style={{ maxWidth: 680, margin: 0, lineHeight: 1.55 }}
-            >
-              Orchestrate agents, enforce approvals, observe every run —
-              policy-driven, end to end.
-            </p>
-          </div>
-          <form action="/api/v1/auth/signout" method="post">
-            <button
-              type="submit"
-              className="btn-primary"
-              style={{ fontSize: "0.82rem", padding: "0.45rem 1rem" }}
-            >
-              Sign out
-            </button>
-          </form>
-        </div>
+          AI Operations Control Plane
+        </h1>
+        <p
+          className="muted"
+          style={{ margin: 0, maxWidth: 620, lineHeight: 1.55 }}
+        >
+          Orchestrate agents, enforce approvals, observe every run —
+          policy-driven, end to end.
+        </p>
       </header>
 
       <section
         className="grid"
-        style={{ gridTemplateColumns: "2fr 1fr", marginBottom: "1rem" }}
+        style={{ gridTemplateColumns: "repeat(4, 1fr)" }}
       >
-        <ChatPanel />
-        <AgentOverview />
+        {STATUS_CARDS.map((c) => (
+          <div
+            key={c.label}
+            className="panel"
+            style={{ textAlign: "center", padding: "0.85rem" }}
+          >
+            <div
+              className="muted"
+              style={{ fontSize: "0.75rem", marginBottom: "0.3rem" }}
+            >
+              {c.label}
+            </div>
+            <div
+              style={{ fontWeight: 600, color: c.ok ? "#86efac" : "#fda4af" }}
+            >
+              {c.value}
+            </div>
+          </div>
+        ))}
       </section>
 
       <section
         className="grid"
-        style={{ gridTemplateColumns: "1fr 1fr 1fr", marginBottom: "1rem" }}
+        style={{ gridTemplateColumns: "repeat(4, 1fr)" }}
       >
-        <ProjectPanel />
-        {snapshot.features["memory.long_term"] ? (
-          <MemoryPanel />
-        ) : (
-          <FeatureLock
-            title="Memory and Knowledge"
-            description="Long-term memory is gated for free demo users."
-            recommendedPlan="pro"
-          />
-        )}
-        {snapshot.features["connectors.premium"] ? (
-          <ConnectorPanel />
-        ) : (
-          <FeatureLock
-            title="Connectors and Settings"
-            description="Connector features are available only for internal access."
-            recommendedPlan="pro"
-          />
-        )}
+        {SIGNAL_CARDS.map((c) => (
+          <div key={c.label} className="panel" style={{ padding: "0.85rem" }}>
+            <div
+              className="muted"
+              style={{ fontSize: "0.75rem", marginBottom: "0.3rem" }}
+            >
+              {c.label}
+            </div>
+            <div
+              style={{
+                fontSize: "1.5rem",
+                fontWeight: 700,
+                letterSpacing: "-0.02em",
+              }}
+            >
+              {c.value}
+            </div>
+          </div>
+        ))}
       </section>
 
-      <section
-        className="grid"
-        style={{ gridTemplateColumns: "1fr 1fr 1fr", marginBottom: "1rem" }}
-      >
-        <AccessStatePanel snapshot={snapshot} />
-        <PermissionPanel />
-        <ObservabilityPanel />
+      <section className="panel">
+        <h3 style={{ marginTop: 0, marginBottom: "0.85rem" }}>Quick Actions</h3>
+        <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
+          {QUICK_LINKS.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="shell-nav-link"
+              style={{ padding: "0.5rem 0.9rem", fontSize: "0.85rem" }}
+            >
+              {link.label}
+            </Link>
+          ))}
+        </div>
       </section>
 
       <section className="grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
-        <BotCreationPanel />
+        <AgentOverview />
+        <MemoryPanel />
       </section>
-    </DashboardShell>
+
+      <ObservabilityPanel />
+
+      <MaintenancePanel compact />
+    </div>
   );
 }

@@ -1,11 +1,10 @@
 const navItems = [
-  { href: "/app", label: "Overview" },
-  { href: "/app?tab=advisor", label: "AI Advisor" },
-  { href: "/app?tab=bots", label: "Bot Creator" },
-  { href: "/app?tab=projects", label: "Projects" },
-  { href: "/app?tab=agents", label: "Agents" },
-  { href: "/app?tab=memory", label: "Memory" },
-  { href: "/app?tab=connectors", label: "Connectors" },
+  { href: "/app", label: "Cockpit" },
+  { href: "/app/bots", label: "Bots" },
+  { href: "/app/workflows", label: "Workflows" },
+  { href: "/app/memory", label: "Memory" },
+  { href: "/app/observability", label: "Observability" },
+  { href: "/app/maintenance", label: "Maintenance" },
 ] as const;
 
 export function SideNav() {
