@@ -8,11 +8,14 @@ type MetricsPayload = {
     chunks: number;
     documents: number;
     isSeeded: boolean;
+    mode: "memory" | "postgres";
   };
   recentRuns: Array<{
     agent: "orchestrator" | "research" | "builder" | "debugger";
+    agentPath: string[];
     cacheHit: boolean;
     contextCount: number;
+    estimatedCostUsd: number;
     latencyMs: number;
     normalizedQuery: string;
     query: string;
@@ -20,12 +23,16 @@ type MetricsPayload = {
     runId: string;
     timestamp: string;
     tokenEstimate: number;
+    traceUrl?: string;
   }>;
   summary: {
     avgLatencyMs: number;
     cacheHitRate: number;
     errorCount: number;
+    estimatedCostUsd: number;
     requestCount: number;
+    retrievalCount: number;
+    slowRuns: number;
     totalTokens: number;
   };
 };
@@ -105,12 +112,27 @@ export function ObservabilityPanel() {
           <p className="muted">Errors</p>
           <strong>{metrics?.summary.errorCount ?? 0}</strong>
         </div>
+        <div className="observability-card">
+          <p className="muted">Retrieval docs</p>
+          <strong>{metrics?.summary.retrievalCount ?? 0}</strong>
+        </div>
+        <div className="observability-card">
+          <p className="muted">Slow runs</p>
+          <strong>{metrics?.summary.slowRuns ?? 0}</strong>
+        </div>
+        <div className="observability-card">
+          <p className="muted">Est cost</p>
+          <strong>
+            ${(metrics?.summary.estimatedCostUsd ?? 0).toFixed(4)}
+          </strong>
+        </div>
       </div>
 
       <p className="muted" style={{ marginTop: "0.8rem" }}>
         RAG seeded: {metrics?.rag.isSeeded ? "yes" : "no"} | docs:{" "}
         {metrics?.rag.documents ?? 0} | chunks: {metrics?.rag.chunks ?? 0} |
-        cached queries: {metrics?.rag.cacheEntries ?? 0}
+        cached queries: {metrics?.rag.cacheEntries ?? 0} | mode:{" "}
+        {metrics?.rag.mode ?? "memory"}
       </p>
 
       {error ? <p className="upgrade-error">{error}</p> : null}
@@ -140,8 +162,17 @@ export function ObservabilityPanel() {
               <p className="muted" style={{ margin: "0.25rem 0 0" }}>
                 rag {run.ragUsed ? "used" : "none"} | cache{" "}
                 {run.cacheHit ? "hit" : "miss"} | context {run.contextCount} |
-                tokens {run.tokenEstimate}
+                tokens {run.tokenEstimate} | cost $
+                {run.estimatedCostUsd.toFixed(6)}
               </p>
+              <p className="muted" style={{ margin: "0.25rem 0 0" }}>
+                path {run.agentPath.join(" -> ")}
+              </p>
+              {run.traceUrl ? (
+                <p className="muted" style={{ margin: "0.25rem 0 0" }}>
+                  trace {run.traceUrl}
+                </p>
+              ) : null}
             </div>
           ))
         )}

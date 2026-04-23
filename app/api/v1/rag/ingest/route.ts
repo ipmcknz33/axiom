@@ -35,7 +35,7 @@ export async function POST(request: Request) {
       content: doc.content ?? doc.text ?? "",
     }));
 
-    const result = ingestDocuments(normalizedDocuments);
+    const result = await ingestDocuments(normalizedDocuments);
 
     return ok({
       ...result,

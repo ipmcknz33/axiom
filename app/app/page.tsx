@@ -2,6 +2,7 @@ import { AgentOverview } from "@/app/components/dashboard/agent-overview";
 import { DashboardShell } from "@/app/components/dashboard/dashboard-shell";
 import { FeatureLock } from "@/app/components/access/feature-lock";
 import { AccessStatePanel } from "@/app/components/dashboard/access-state-panel";
+import { BotCreationPanel } from "@/app/components/dashboard/bot-creation-panel";
 import { ChatPanel } from "@/app/components/dashboard/chat-panel";
 import { ConnectorPanel } from "@/app/components/dashboard/connector-panel";
 import { MemoryPanel } from "@/app/components/dashboard/memory-panel";
@@ -34,24 +35,45 @@ export default async function WorkspacePage() {
 
   return (
     <DashboardShell>
-      <header style={{ marginBottom: "1.25rem" }}>
-        <span className="pill">Axiom Workspace</span>
-        <h1 style={{ margin: "0.75rem 0 0.35rem", fontSize: "2rem" }}>
-          AI Operations Demo Control Plane
-        </h1>
-        <p className="muted" style={{ maxWidth: 740, margin: 0 }}>
-          Protected workspace for orchestrating agents, approvals, memory, and
-          connectors under policy.
-        </p>
-        <form
-          action="/api/v1/auth/signout"
-          method="post"
-          style={{ marginTop: "0.9rem" }}
+      <header style={{ marginBottom: "1.5rem" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "0.75rem",
+          }}
         >
-          <button type="submit" className="pill" style={{ cursor: "pointer" }}>
-            Sign out
-          </button>
-        </form>
+          <div>
+            <span className="pill workspace-header-pill">Axiom Workspace</span>
+            <h1
+              style={{
+                margin: "0.6rem 0 0.3rem",
+                fontSize: "2rem",
+                letterSpacing: "-0.02em",
+              }}
+            >
+              AI Operations Control Plane
+            </h1>
+            <p
+              className="muted"
+              style={{ maxWidth: 680, margin: 0, lineHeight: 1.55 }}
+            >
+              Orchestrate agents, enforce approvals, observe every run —
+              policy-driven, end to end.
+            </p>
+          </div>
+          <form action="/api/v1/auth/signout" method="post">
+            <button
+              type="submit"
+              className="btn-primary"
+              style={{ fontSize: "0.82rem", padding: "0.45rem 1rem" }}
+            >
+              Sign out
+            </button>
+          </form>
+        </div>
       </header>
 
       <section
@@ -87,10 +109,17 @@ export default async function WorkspacePage() {
         )}
       </section>
 
-      <section className="grid" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
+      <section
+        className="grid"
+        style={{ gridTemplateColumns: "1fr 1fr 1fr", marginBottom: "1rem" }}
+      >
         <AccessStatePanel snapshot={snapshot} />
         <PermissionPanel />
         <ObservabilityPanel />
+      </section>
+
+      <section className="grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
+        <BotCreationPanel />
       </section>
     </DashboardShell>
   );

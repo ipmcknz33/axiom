@@ -1,5 +1,7 @@
+import { END, START, StateGraph } from "@/server/ai/langgraph-runtime";
 import { trackRun } from "@/server/ai/telemetry";
 import { retrieveRelevantChunks } from "@/server/rag/store";
+import { getObservabilityConfig } from "@/server/observability/config";
 
 type AgentRole = "orchestrator" | "research" | "builder" | "debugger";
 
@@ -12,6 +14,7 @@ export type QueryPipelineInput = {
 
 export type QueryPipelineOutput = {
   agent: AgentRole;
+  agentPath: string[];
   cacheHit: boolean;
   contextCount: number;
   context: Array<{
@@ -20,6 +23,7 @@ export type QueryPipelineOutput = {
     source?: string;
     title: string;
   }>;
+  estimatedCostUsd: number;
   latencyMs: number;
   normalizedQuery: string;
   ragUsed: boolean;
@@ -27,6 +31,24 @@ export type QueryPipelineOutput = {
   runId: string;
   specializationHint?: string;
   tokenEstimate: number;
+  traceUrl?: string;
+};
+
+type PipelineState = {
+  agent: AgentRole;
+  agentPath: string[];
+  cacheHit: boolean;
+  context: Array<{
+    id: string;
+    score: number;
+    source?: string;
+    title: string;
+    content: string;
+  }>;
+  normalizedQuery: string;
+  query: string;
+  response: string;
+  topK?: number;
 };
 
 const AGENT_KEYWORDS: Record<Exclude<AgentRole, "orchestrator">, string[]> = {
@@ -68,6 +90,10 @@ function pickAgent(query: string): AgentRole {
 
 function estimateTokens(text: string): number {
   return Math.max(1, Math.ceil(text.length / 4));
+}
+
+function estimateCostUsd(tokenEstimate: number): number {
+  return Number((tokenEstimate * 0.000002).toFixed(6));
 }
 
 function formatContextSnippet(content: string): string {
@@ -112,57 +138,109 @@ export async function runQueryPipeline(
 ): Promise<QueryPipelineOutput> {
   const startedAt = Date.now();
   const runId = `run_${Math.random().toString(36).slice(2, 10)}`;
-  const agent = pickAgent(input.query);
+  const graph = new StateGraph<PipelineState>()
+    .addNode("normalize", (state) => ({
+      ...state,
+      agentPath: [...state.agentPath, "normalize"],
+      normalizedQuery: state.query.replace(/\s+/g, " ").trim().toLowerCase(),
+    }))
+    .addNode("route", (state) => {
+      const agent = pickAgent(state.normalizedQuery);
+      return {
+        ...state,
+        agent,
+        agentPath: [...state.agentPath, `route:${agent}`],
+      };
+    })
+    .addNode("retrieve", async (state) => {
+      const retrieval = await retrieveRelevantChunks({
+        query: state.normalizedQuery,
+        topK: state.topK,
+      });
 
-  const retrieval = retrieveRelevantChunks({
+      return {
+        ...state,
+        agentPath: [...state.agentPath, "retrieve"],
+        cacheHit: retrieval.cacheHit,
+        context: retrieval.items,
+        normalizedQuery: retrieval.normalizedQuery,
+      };
+    })
+    .addNode("respond", (state) => ({
+      ...state,
+      agentPath: [...state.agentPath, "respond"],
+      response: buildAgentResponse({
+        agent: state.agent,
+        query: state.query,
+        context: state.context,
+      }),
+    }))
+    .addEdge(START, "normalize")
+    .addEdge("normalize", "route")
+    .addEdge("route", "retrieve")
+    .addEdge("retrieve", "respond")
+    .addEdge("respond", END)
+    .compile();
+
+  const finalState = await graph.invoke({
+    agent: "orchestrator",
+    agentPath: [],
+    cacheHit: false,
+    context: [],
+    normalizedQuery: "",
     query: input.query,
+    response: "",
     topK: input.topK,
   });
 
-  const response = buildAgentResponse({
-    agent,
-    query: input.query,
-    context: retrieval.items,
-  });
-
   const latencyMs = Date.now() - startedAt;
-  const tokenEstimate = estimateTokens(`${input.query}\n${response}`);
+  const tokenEstimate = estimateTokens(
+    `${input.query}\n${finalState.response}`,
+  );
+  const estimatedCostUsd = estimateCostUsd(tokenEstimate);
   const specializationHint = SPECIALIZATION_KEYWORDS.some((keyword) =>
     input.query.toLowerCase().includes(keyword),
   )
     ? "This looks workflow-specific. Consider creating a dedicated bot for this recurring task."
     : undefined;
+  const traceUrl = getObservabilityConfig().buildTraceUrl(runId);
 
   trackRun({
-    agent,
-    cacheHit: retrieval.cacheHit,
-    contextCount: retrieval.items.length,
+    agent: finalState.agent,
+    agentPath: finalState.agentPath,
+    cacheHit: finalState.cacheHit,
+    contextCount: finalState.context.length,
+    estimatedCostUsd,
     latencyMs,
-    normalizedQuery: retrieval.normalizedQuery,
+    normalizedQuery: finalState.normalizedQuery,
     query: input.query,
-    ragUsed: retrieval.items.length > 0,
+    ragUsed: finalState.context.length > 0,
     runId,
     timestamp: new Date().toISOString(),
     tokenEstimate,
+    traceUrl,
     userId: input.userId,
   });
 
   return {
-    agent,
-    cacheHit: retrieval.cacheHit,
-    contextCount: retrieval.items.length,
-    context: retrieval.items.map((item) => ({
+    agent: finalState.agent,
+    agentPath: finalState.agentPath,
+    cacheHit: finalState.cacheHit,
+    contextCount: finalState.context.length,
+    context: finalState.context.map((item) => ({
       id: item.id,
       score: Number(item.score.toFixed(4)),
       source: item.source,
       title: item.title,
     })),
+    estimatedCostUsd,
     latencyMs,
-    normalizedQuery: retrieval.normalizedQuery,
-    ragUsed: retrieval.items.length > 0,
-    response,
+    normalizedQuery: finalState.normalizedQuery,
+    ragUsed: finalState.context.length > 0,
+    response: finalState.response,
     runId,
     specializationHint,
     tokenEstimate,
+    traceUrl,
   };
 }

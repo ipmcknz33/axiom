@@ -1,7 +1,10 @@
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+
 export type RagDocumentInput = {
   id: string;
   title: string;
   content: string;
+  metadata?: Record<string, unknown>;
   source?: string;
 };
 
@@ -19,6 +22,7 @@ export type RagRetrievalItem = {
   title: string;
   source?: string;
   content: string;
+  metadata?: Record<string, unknown>;
   score: number;
 };
 
@@ -33,11 +37,13 @@ export type RagStats = {
   documents: number;
   isSeeded: boolean;
   chunks: number;
+  mode: "memory" | "postgres";
 };
 
 export type SeedStatus = {
   documentCount: number;
   isSeeded: boolean;
+  mode: "memory" | "postgres";
 };
 
 type RagQueryCacheEntry = {
@@ -49,11 +55,13 @@ type RagQueryCacheEntry = {
 type RagRuntimeState = {
   chunks: RagChunk[];
   queryCache: Map<string, RagQueryCacheEntry>;
+  mode: "memory" | "postgres";
   seeded: boolean;
 };
 
 const EMBEDDING_DIM = 24;
 const MAX_CACHE_ENTRIES = 200;
+const DEFAULT_TOP_K = 4;
 
 const DEMO_SEED_DOCUMENTS: RagDocumentInput[] = [
   {
@@ -96,6 +104,7 @@ function getRuntimeState(): RagRuntimeState {
     globalThis.__axiomRagState = {
       chunks: [],
       queryCache: new Map<string, RagQueryCacheEntry>(),
+      mode: "memory",
       seeded: false,
     };
   }
@@ -192,6 +201,7 @@ function dedupeAndValidateDocuments(
       id: doc.id,
       title: doc.title,
       content: doc.content,
+      metadata: doc.metadata,
       source: doc.source,
     });
   }
@@ -199,21 +209,71 @@ function dedupeAndValidateDocuments(
   return output;
 }
 
-export function ingestDocuments(documents: RagDocumentInput[]) {
-  const state = getRuntimeState();
-  const validDocuments = dedupeAndValidateDocuments(documents);
+function upsertMemoryDocuments(
+  documents: RagDocumentInput[],
+  state: RagRuntimeState,
+) {
   const now = new Date().toISOString();
 
-  for (const doc of validDocuments) {
-    state.chunks.push({
+  for (const doc of documents) {
+    const chunk: RagChunk = {
       id: doc.id,
       title: doc.title,
       source: doc.source,
       content: doc.content,
       embedding: buildEmbedding(doc.content),
       ingestedAt: now,
-    });
+    };
+
+    const existingIndex = state.chunks.findIndex((item) => item.id === doc.id);
+    if (existingIndex >= 0) {
+      state.chunks[existingIndex] = chunk;
+    } else {
+      state.chunks.push(chunk);
+    }
   }
+}
+
+function toVectorLiteral(values: number[]): string {
+  return `[${values.map((value) => value.toFixed(8)).join(",")}]`;
+}
+
+async function ingestToPostgres(
+  documents: RagDocumentInput[],
+): Promise<boolean> {
+  try {
+    const supabase = createSupabaseServerClient();
+    const rows = documents.map((doc) => ({
+      id: doc.id,
+      title: doc.title,
+      content: doc.content,
+      source: doc.source ?? null,
+      metadata: doc.metadata ?? {},
+      embedding: toVectorLiteral(buildEmbedding(doc.content)),
+      updated_at: new Date().toISOString(),
+    }));
+
+    const { error } = await (supabase.from("rag_documents") as any).upsert(
+      rows,
+      {
+        onConflict: "id",
+      },
+    );
+
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function ingestDocuments(documents: RagDocumentInput[]) {
+  const state = getRuntimeState();
+  const validDocuments = dedupeAndValidateDocuments(documents);
+
+  const postgresOk = await ingestToPostgres(validDocuments);
+  state.mode = postgresOk ? "postgres" : "memory";
+
+  upsertMemoryDocuments(validDocuments, state);
 
   if (validDocuments.length > 0) {
     state.queryCache.clear();
@@ -221,6 +281,7 @@ export function ingestDocuments(documents: RagDocumentInput[]) {
 
   return {
     ingested: validDocuments.length,
+    mode: state.mode,
     totalChunks: state.chunks.length,
   };
 }
@@ -228,24 +289,14 @@ export function ingestDocuments(documents: RagDocumentInput[]) {
 function setSeedCorpus(state: RagRuntimeState): SeedStatus {
   state.chunks = [];
   state.queryCache.clear();
-  const now = new Date().toISOString();
-
-  for (const doc of DEMO_SEED_DOCUMENTS) {
-    state.chunks.push({
-      id: doc.id,
-      title: doc.title,
-      source: doc.source,
-      content: doc.content,
-      embedding: buildEmbedding(doc.content),
-      ingestedAt: now,
-    });
-  }
+  upsertMemoryDocuments(DEMO_SEED_DOCUMENTS, state);
 
   state.seeded = true;
 
   return {
     documentCount: state.chunks.length,
     isSeeded: state.seeded,
+    mode: state.mode,
   };
 }
 
@@ -254,31 +305,97 @@ export function isSeeded(): boolean {
   return state.seeded;
 }
 
-export function ensureSeeded(): SeedStatus {
+export async function ensureSeeded(): Promise<SeedStatus> {
   const state = getRuntimeState();
   if (state.seeded && state.chunks.length > 0) {
     return {
       documentCount: state.chunks.length,
       isSeeded: true,
+      mode: state.mode,
     };
   }
 
-  return setSeedCorpus(state);
+  const seedState = setSeedCorpus(state);
+  const postgresOk = await ingestToPostgres(DEMO_SEED_DOCUMENTS);
+  if (postgresOk) {
+    state.mode = "postgres";
+    seedState.mode = "postgres";
+  }
+
+  return seedState;
 }
 
-export function reseedDemoDocuments(): SeedStatus {
+export async function reseedDemoDocuments(): Promise<SeedStatus> {
   const state = getRuntimeState();
-  return setSeedCorpus(state);
+  const seedState = setSeedCorpus(state);
+  const postgresOk = await ingestToPostgres(DEMO_SEED_DOCUMENTS);
+  if (postgresOk) {
+    state.mode = "postgres";
+    seedState.mode = "postgres";
+  }
+
+  return seedState;
 }
 
-export function retrieveRelevantChunks(input: {
+async function retrieveFromPostgres(input: {
   query: string;
+  topK: number;
+  metadataFilter?: Record<string, unknown>;
+}): Promise<RagRetrievalItem[] | null> {
+  try {
+    const supabase = createSupabaseServerClient();
+    const queryEmbedding = buildEmbedding(input.query);
+    const { data, error } = await (supabase.rpc("match_rag_documents", {
+      query_embedding: toVectorLiteral(queryEmbedding),
+      match_count: input.topK,
+      metadata_filter: input.metadataFilter ?? {},
+    }) as any);
+
+    if (error || !Array.isArray(data)) {
+      return null;
+    }
+
+    return data.map((row: any) => ({
+      id: String(row.id),
+      title: String(row.title),
+      source: row.source ?? undefined,
+      content: String(row.content),
+      metadata: row.metadata ?? undefined,
+      score: Number(row.score ?? 0),
+    }));
+  } catch {
+    return null;
+  }
+}
+
+function retrieveFromMemory(input: {
+  query: string;
+  topK: number;
+}): RagRetrievalItem[] {
+  const state = getRuntimeState();
+  const queryEmbedding = buildEmbedding(input.query);
+  return state.chunks
+    .map((chunk) => ({
+      id: chunk.id,
+      title: chunk.title,
+      source: chunk.source,
+      content: chunk.content,
+      score: cosineSimilarity(queryEmbedding, chunk.embedding),
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, input.topK)
+    .filter((item) => item.score > 0);
+}
+
+export async function retrieveRelevantChunks(input: {
+  query: string;
+  metadataFilter?: Record<string, unknown>;
   topK?: number;
-}): RagRetrievalResult {
-  ensureSeeded();
+}): Promise<RagRetrievalResult> {
+  await ensureSeeded();
   const state = getRuntimeState();
   const normalizedQuery = normalizeQuery(input.query);
-  const topK = Math.max(1, Math.min(input.topK ?? 4, 8));
+  const topK = Math.max(1, Math.min(input.topK ?? DEFAULT_TOP_K, 8));
 
   const cached = state.queryCache.get(normalizedQuery);
   if (cached) {
@@ -289,18 +406,15 @@ export function retrieveRelevantChunks(input: {
     };
   }
 
-  const queryEmbedding = buildEmbedding(normalizedQuery);
-  const ranked = state.chunks
-    .map((chunk) => ({
-      id: chunk.id,
-      title: chunk.title,
-      source: chunk.source,
-      content: chunk.content,
-      score: cosineSimilarity(queryEmbedding, chunk.embedding),
-    }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, topK)
-    .filter((item) => item.score > 0);
+  const postgresItems = await retrieveFromPostgres({
+    query: normalizedQuery,
+    topK,
+    metadataFilter: input.metadataFilter,
+  });
+
+  const ranked =
+    postgresItems ?? retrieveFromMemory({ query: normalizedQuery, topK });
+  state.mode = postgresItems ? "postgres" : "memory";
 
   const entry: RagQueryCacheEntry = {
     items: ranked,
@@ -324,5 +438,6 @@ export function getRagStats(): RagStats {
     documents: state.chunks.length,
     isSeeded: state.seeded,
     chunks: state.chunks.length,
+    mode: state.mode,
   };
 }

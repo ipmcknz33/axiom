@@ -6,15 +6,18 @@ type Role = "assistant" | "user";
 
 type InspectorPayload = {
   agent: "orchestrator" | "research" | "builder" | "debugger";
+  agentPath: string[];
   cacheHit: boolean;
   context: Array<{ id: string; score: number; source?: string; title: string }>;
   contextCount: number;
+  estimatedCostUsd: number;
   latencyMs: number;
   normalizedQuery: string;
   ragUsed: boolean;
   runId: string;
   specializationHint?: string;
   tokenEstimate: number;
+  traceUrl?: string;
 };
 
 type Message = {
@@ -218,15 +221,18 @@ export function AiAssistant() {
         data?: {
           response: string;
           agent: InspectorPayload["agent"];
+          agentPath: string[];
           cacheHit: boolean;
           context: InspectorPayload["context"];
           contextCount: number;
+          estimatedCostUsd: number;
           latencyMs: number;
           normalizedQuery: string;
           ragUsed: boolean;
           runId: string;
           specializationHint?: string;
           tokenEstimate: number;
+          traceUrl?: string;
         };
         error?: { message?: string };
       };
@@ -243,15 +249,18 @@ export function AiAssistant() {
         id: uid(),
         inspector: {
           agent: payload.data.agent,
+          agentPath: payload.data.agentPath,
           cacheHit: payload.data.cacheHit,
           context: payload.data.context,
           contextCount: payload.data.contextCount,
+          estimatedCostUsd: payload.data.estimatedCostUsd,
           latencyMs: payload.data.latencyMs,
           normalizedQuery: payload.data.normalizedQuery,
           ragUsed: payload.data.ragUsed,
           runId: payload.data.runId,
           specializationHint: payload.data.specializationHint,
           tokenEstimate: payload.data.tokenEstimate,
+          traceUrl: payload.data.traceUrl,
         },
         prompt: trimmed,
         role: "assistant",
@@ -399,8 +408,15 @@ export function AiAssistant() {
                     {latestAssistant.inspector.tokenEstimate}
                   </p>
                   <p className="muted" style={{ margin: "0.35rem 0 0" }}>
+                    est cost $
+                    {latestAssistant.inspector.estimatedCostUsd.toFixed(6)}
+                  </p>
+                  <p className="muted" style={{ margin: "0.35rem 0 0" }}>
                     cache {latestAssistant.inspector.cacheHit ? "hit" : "miss"}{" "}
                     | rag {latestAssistant.inspector.ragUsed ? "used" : "none"}
+                  </p>
+                  <p className="muted" style={{ margin: "0.35rem 0 0" }}>
+                    path: {latestAssistant.inspector.agentPath.join(" -> ")}
                   </p>
                   <p className="muted" style={{ margin: "0.35rem 0 0" }}>
                     prompt: {latestAssistant.prompt}
@@ -412,6 +428,11 @@ export function AiAssistant() {
                   <p className="muted" style={{ margin: "0.35rem 0 0" }}>
                     context docs: {latestAssistant.inspector.contextCount}
                   </p>
+                  {latestAssistant.inspector.traceUrl ? (
+                    <p className="muted" style={{ margin: "0.35rem 0 0" }}>
+                      trace: {latestAssistant.inspector.traceUrl}
+                    </p>
+                  ) : null}
                 </>
               )}
             </div>

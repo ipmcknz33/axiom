@@ -14,7 +14,7 @@ export async function GET(request: Request) {
       return fail(auth.error, 401, "unauthenticated");
     }
 
-    const status = ensureSeeded();
+    const status = await ensureSeeded();
 
     return ok({
       ...status,
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
       return fail(auth.error, 401, "unauthenticated");
     }
 
-    const status = reseedDemoDocuments();
+    const status = await reseedDemoDocuments();
 
     return ok({
       ...status,

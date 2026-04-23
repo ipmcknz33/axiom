@@ -9,6 +9,17 @@ export type PublicEnv = {
 export type ServerEnv = PublicEnv & {
   SUPABASE_SERVICE_ROLE_KEY: string;
   DATABASE_URL: string;
+  // LLM — optional until live AI phase
+  OPENAI_API_KEY?: string;
+  OPENAI_MODEL?: string;
+  OPENAI_EMBEDDING_MODEL?: string;
+  // Observability / LangSmith — optional
+  LANGSMITH_API_KEY?: string;
+  LANGSMITH_PROJECT?: string;
+  LANGSMITH_TRACING?: string;
+  LANGCHAIN_ENDPOINT?: string;
+  // Site
+  NEXT_PUBLIC_SITE_URL?: string;
 };
 
 let publicEnvCache: PublicEnv | undefined;
@@ -53,6 +64,10 @@ function requireUrl(name: string, raw: string | undefined): string {
   }
 }
 
+function optionalString(raw: string | undefined): string | undefined {
+  return raw && raw.trim().length > 0 ? raw.trim() : undefined;
+}
+
 export function getPublicEnv(): PublicEnv {
   if (!publicEnvCache) {
     publicEnvCache = {
@@ -80,6 +95,19 @@ export function getServerEnv(): ServerEnv {
         process.env.SUPABASE_SERVICE_ROLE_KEY,
       ),
       DATABASE_URL: requireString("DATABASE_URL", process.env.DATABASE_URL),
+      // LLM — optional
+      OPENAI_API_KEY: optionalString(process.env.OPENAI_API_KEY),
+      OPENAI_MODEL: optionalString(process.env.OPENAI_MODEL),
+      OPENAI_EMBEDDING_MODEL: optionalString(
+        process.env.OPENAI_EMBEDDING_MODEL,
+      ),
+      // Observability — optional
+      LANGSMITH_API_KEY: optionalString(process.env.LANGSMITH_API_KEY),
+      LANGSMITH_PROJECT: optionalString(process.env.LANGSMITH_PROJECT),
+      LANGSMITH_TRACING: optionalString(process.env.LANGSMITH_TRACING),
+      LANGCHAIN_ENDPOINT: optionalString(process.env.LANGCHAIN_ENDPOINT),
+      // Site
+      NEXT_PUBLIC_SITE_URL: optionalString(process.env.NEXT_PUBLIC_SITE_URL),
     };
   }
 

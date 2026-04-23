@@ -1,8 +1,8 @@
-# Axiom Phase 1 Architecture
+# Axiom Architecture
 
 ## Goals
 
-Establish a production-grade foundation for a modular AI operating system with strict security boundaries and clean expansion paths.
+Establish a production-grade foundation for a modular AI operating system with strict security boundaries, premium product presentation, and clean expansion paths.
 
 ## Layered structure
 
@@ -27,6 +27,8 @@ Establish a production-grade foundation for a modular AI operating system with s
 - `POST /api/v1/rag/seed`: force reseed deterministic demo corpus for resettable demos.
 - `POST /api/v1/ai/query`: authenticated orchestration pipeline endpoint with retrieval-augmented responses.
 - `GET /api/v1/ai/metrics`: authenticated telemetry endpoint exposing AI runtime summary metrics and recent runs.
+- `GET /api/v1/bots`: authenticated endpoint returning recent bot creation requests.
+- `POST /api/v1/bots`: authenticated bot request validation and queuing endpoint.
 - `GET /api/v1/projects`, `/tasks`, `/memory`: scaffolds to anchor phase 2 implementation.
 - `GET /api/v1/health`: readiness endpoint returning env + database check details and HTTP `503` when degraded.
 
@@ -115,17 +117,41 @@ Establish a production-grade foundation for a modular AI operating system with s
 
 ## RAG and observability runtime
 
-- `server/rag/store.ts` provides ingestion, deterministic hashed embeddings, cosine retrieval, and bounded query-level retrieval cache.
-- `server/rag/store.ts` also provides deterministic seed corpus helpers: `ensureSeeded`, `isSeeded`, and `reseedDemoDocuments`.
+- `server/rag/store.ts` provides ingestion, deterministic hashed embeddings, cosine retrieval, bounded query-level cache, and dual-mode retrieval (Postgres/memory).
+- `server/rag/store.ts` exposes deterministic seed corpus helpers: `ensureSeeded`, `isSeeded`, and `reseedDemoDocuments`.
 - Runtime state is attached to `globalThis` for stable behavior during local hot reloads.
-- `server/ai/orchestrator.ts` runs the query pipeline: delegation, retrieval, synthesis, and run metadata shaping.
-- `server/ai/telemetry.ts` tracks bounded run history and aggregate metrics (`requestCount`, `avgLatencyMs`, `totalTokens`, `cacheHitRate`, `errorCount`).
-- `app/components/dashboard/observability-panel.tsx` surfaces metric cards, recent runs, and slow-query highlighting in the workspace shell.
+- `server/ai/orchestrator.ts` executes an explicit graph pipeline via the local `StateGraph` adapter: `normalize → route → retrieve → respond`.
+- `server/ai/telemetry.ts` tracks bounded run history and aggregate metrics including `requestCount`, `avgLatencyMs`, `totalTokens`, `cacheHitRate`, `errorCount`, `retrievalCount`, `slowRuns`, and `estimatedCostUsd`.
+- `app/components/dashboard/observability-panel.tsx` surfaces metric cards (including retrieval count, slow run count, estimated cost), recent runs, agent path, and slow-query highlighting.
+- Inspector panel in the assistant exposes per-run `agentPath`, `estimatedCostUsd`, and optional `traceUrl` in addition to agent, latency, tokens, cache, and RAG status.
 
-## Planned phase 2 evolution
+## Bot creation flow
 
-- Introduce worker execution plane and durable orchestration.
+- `server/bots/store.ts` provides an in-memory demo request queue with `queueBotRequest` and `getRecentBotRequests`; bounded to 50 records per runtime.
+- `app/api/v1/bots/route.ts` provides `GET` (recent requests) and `POST` (validate name, intent, capabilities + queue) with full auth enforcement.
+- `app/components/dashboard/bot-creation-panel.tsx` provides a first-class Bot Creator UX: bot name, task intent, capability selector (chat / workflow / research / monitoring), confirmation checkbox, create action, and recent requests preview.
+- Bot Creator is surfaced as a dedicated panel in the workspace shell and linked from the side navigation.
+
+## Visual and design system
+
+- `app/global.css` defines a unified premium token system: `--bg`, `--panel`, `--panel-soft`, `--text`, `--muted`, `--accent`, `--border`.
+- `.panel-premium` is a shared elevated panel treatment used across workspace shell surfaces and the side nav.
+- `.btn-primary` is a shared primary CTA button with gradient fill, glow hover, and animated lift used on both landing and workspace.
+- `.workspace-header-pill` adds a green live-dot indicator for active session context.
+- Landing and `/app` share the same token layer so both surfaces read as one coherent product.
+
+## Landing page
+
+- `components/marketing/landing-hero.tsx` provides a two-column premium composition:
+  - Left: gradient headline, system highlights (graph orchestration, RAG retrieval, approval gates, observability), single `Enter Workspace` CTA.
+  - Right: four live signal metric cards + terminal-style pipeline trace snippet (normalize / route / retrieve / respond).
+- One CTA only (`Enter Workspace`); `Request Access` removed to eliminate split-intent friction.
+
+## Planned next backend phase
+
+- Full LangGraph package integration when package policy permits, replacing the local `StateGraph` adapter.
+- pgvector as the canonical retrieval layer with deterministic in-memory fallback retained for local resilience.
+- Preserve assistant guidance and observability explainability as non-negotiable UX constraints through all backend changes.
 - Add full RLS policy matrix and tenant-aware permission model.
 - Add connector OAuth flows and encrypted credential vault integration.
-- Implement vector retrieval + memory ranking service.
-- Connect assistant to live orchestrator API for real dispatch and response streaming.
+- Implement worker execution plane and durable orchestration for long-running tasks.

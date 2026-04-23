@@ -1,7 +1,9 @@
 export type PipelineRunRecord = {
   agent: "orchestrator" | "research" | "builder" | "debugger";
+  agentPath: string[];
   cacheHit: boolean;
   contextCount: number;
+  estimatedCostUsd: number;
   error?: string;
   latencyMs: number;
   normalizedQuery: string;
@@ -10,6 +12,7 @@ export type PipelineRunRecord = {
   runId: string;
   timestamp: string;
   tokenEstimate: number;
+  traceUrl?: string;
   userId: string;
 };
 
@@ -17,7 +20,10 @@ export type TelemetrySummary = {
   avgLatencyMs: number;
   cacheHitRate: number;
   errorCount: number;
+  estimatedCostUsd: number;
   requestCount: number;
+  retrievalCount: number;
+  slowRuns: number;
   totalTokens: number;
 };
 
@@ -26,6 +32,7 @@ type TelemetryRuntimeState = {
 };
 
 const MAX_RUN_HISTORY = 150;
+const SLOW_RUN_THRESHOLD_MS = 1200;
 
 declare global {
   // eslint-disable-next-line no-var
@@ -59,7 +66,10 @@ export function getTelemetrySummary(): TelemetrySummary {
       avgLatencyMs: 0,
       cacheHitRate: 0,
       errorCount: 0,
+      estimatedCostUsd: 0,
       requestCount: 0,
+      retrievalCount: 0,
+      slowRuns: 0,
       totalTokens: 0,
     };
   }
@@ -77,12 +87,27 @@ export function getTelemetrySummary(): TelemetrySummary {
     (sum, run) => sum + (run.error ? 1 : 0),
     0,
   );
+  const retrievalCount = state.runs.reduce(
+    (sum, run) => sum + run.contextCount,
+    0,
+  );
+  const slowRuns = state.runs.reduce(
+    (sum, run) => sum + (run.latencyMs >= SLOW_RUN_THRESHOLD_MS ? 1 : 0),
+    0,
+  );
+  const estimatedCostUsd = state.runs.reduce(
+    (sum, run) => sum + run.estimatedCostUsd,
+    0,
+  );
 
   return {
     avgLatencyMs: Math.round(totalLatency / requestCount),
     cacheHitRate: Number((cacheHits / requestCount).toFixed(3)),
     errorCount,
+    estimatedCostUsd: Number(estimatedCostUsd.toFixed(6)),
     requestCount,
+    retrievalCount,
+    slowRuns,
     totalTokens,
   };
 }
