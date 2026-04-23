@@ -4,7 +4,9 @@ export type PipelineRunRecord = {
   contextCount: number;
   error?: string;
   latencyMs: number;
+  normalizedQuery: string;
   query: string;
+  ragUsed: boolean;
   runId: string;
   timestamp: string;
   tokenEstimate: number;

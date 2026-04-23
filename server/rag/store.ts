@@ -31,7 +31,13 @@ export type RagRetrievalResult = {
 export type RagStats = {
   cacheEntries: number;
   documents: number;
+  isSeeded: boolean;
   chunks: number;
+};
+
+export type SeedStatus = {
+  documentCount: number;
+  isSeeded: boolean;
 };
 
 type RagQueryCacheEntry = {
@@ -43,10 +49,42 @@ type RagQueryCacheEntry = {
 type RagRuntimeState = {
   chunks: RagChunk[];
   queryCache: Map<string, RagQueryCacheEntry>;
+  seeded: boolean;
 };
 
 const EMBEDDING_DIM = 24;
 const MAX_CACHE_ENTRIES = 200;
+
+const DEMO_SEED_DOCUMENTS: RagDocumentInput[] = [
+  {
+    id: "seed-marketing-strategy",
+    title: "Marketing Strategy Guide",
+    source: "demo://marketing",
+    content:
+      "For a high-impact marketing plan, start with audience segmentation, map pain points, define a message hierarchy, and test one core offer across channels. Combine weekly content themes with measurable conversion goals.",
+  },
+  {
+    id: "seed-frontend-system-design",
+    title: "Frontend System Design Notes",
+    source: "demo://frontend",
+    content:
+      "A resilient frontend architecture uses route-level boundaries, typed contracts between UI and APIs, optimistic states with deterministic rollback, and observability hooks for latency and error budget tracking.",
+  },
+  {
+    id: "seed-tattoo-workflow",
+    title: "Tattoo Workflow Operations",
+    source: "demo://tattoo",
+    content:
+      "Tattoo studio workflow runs from intake to design approval, stencil prep, session execution, aftercare handoff, and follow-up scheduling. Consistency improves when checklist-based handoffs are used between each step.",
+  },
+  {
+    id: "seed-ai-orchestration",
+    title: "AI Agent Orchestration Reference",
+    source: "demo://orchestration",
+    content:
+      "Agent orchestration should route intent to specialized agents, enrich prompts with retrieved context, enforce approval gates for high-risk actions, and log each run with latency, token estimate, and cache status.",
+  },
+];
 
 declare global {
   // eslint-disable-next-line no-var
@@ -58,6 +96,7 @@ function getRuntimeState(): RagRuntimeState {
     globalThis.__axiomRagState = {
       chunks: [],
       queryCache: new Map<string, RagQueryCacheEntry>(),
+      seeded: false,
     };
   }
 
@@ -186,10 +225,57 @@ export function ingestDocuments(documents: RagDocumentInput[]) {
   };
 }
 
+function setSeedCorpus(state: RagRuntimeState): SeedStatus {
+  state.chunks = [];
+  state.queryCache.clear();
+  const now = new Date().toISOString();
+
+  for (const doc of DEMO_SEED_DOCUMENTS) {
+    state.chunks.push({
+      id: doc.id,
+      title: doc.title,
+      source: doc.source,
+      content: doc.content,
+      embedding: buildEmbedding(doc.content),
+      ingestedAt: now,
+    });
+  }
+
+  state.seeded = true;
+
+  return {
+    documentCount: state.chunks.length,
+    isSeeded: state.seeded,
+  };
+}
+
+export function isSeeded(): boolean {
+  const state = getRuntimeState();
+  return state.seeded;
+}
+
+export function ensureSeeded(): SeedStatus {
+  const state = getRuntimeState();
+  if (state.seeded && state.chunks.length > 0) {
+    return {
+      documentCount: state.chunks.length,
+      isSeeded: true,
+    };
+  }
+
+  return setSeedCorpus(state);
+}
+
+export function reseedDemoDocuments(): SeedStatus {
+  const state = getRuntimeState();
+  return setSeedCorpus(state);
+}
+
 export function retrieveRelevantChunks(input: {
   query: string;
   topK?: number;
 }): RagRetrievalResult {
+  ensureSeeded();
   const state = getRuntimeState();
   const normalizedQuery = normalizeQuery(input.query);
   const topK = Math.max(1, Math.min(input.topK ?? 4, 8));
@@ -236,6 +322,7 @@ export function getRagStats(): RagStats {
   return {
     cacheEntries: state.queryCache.size,
     documents: state.chunks.length,
+    isSeeded: state.seeded,
     chunks: state.chunks.length,
   };
 }

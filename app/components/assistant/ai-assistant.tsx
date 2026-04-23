@@ -8,8 +8,10 @@ type InspectorPayload = {
   agent: "orchestrator" | "research" | "builder" | "debugger";
   cacheHit: boolean;
   context: Array<{ id: string; score: number; source?: string; title: string }>;
+  contextCount: number;
   latencyMs: number;
   normalizedQuery: string;
+  ragUsed: boolean;
   runId: string;
   specializationHint?: string;
   tokenEstimate: number;
@@ -18,6 +20,7 @@ type InspectorPayload = {
 type Message = {
   id: string;
   inspector?: InspectorPayload;
+  prompt?: string;
   role: Role;
   text: string;
 };
@@ -34,15 +37,27 @@ const DEMO_HEADERS = {
   "x-axiom-user-id": "11111111-1111-4111-8111-111111111111",
 };
 
-const SUGGESTIONS: Suggestion[] = [
-  { label: "Summarize priorities", prompt: "Summarize my current priorities." },
+const ONBOARDING_SUGGESTIONS: Suggestion[] = [
+  { label: "Create a marketing plan", prompt: "Create a marketing plan" },
   {
-    label: "Automate daily reporting",
-    prompt: "Automate my daily reporting workflow.",
+    label: "Explain how this system works",
+    prompt: "Explain how this system works",
+  },
+  { label: "Build a workflow bot", prompt: "Build a workflow bot" },
+];
+
+const DEMO_ACTIONS: Suggestion[] = [
+  {
+    label: "Run Demo Workflow",
+    prompt: "Run a demo workflow for weekly reporting and escalation.",
   },
   {
-    label: "Review approvals queue",
-    prompt: "What is pending in the approvals queue?",
+    label: "Test RAG Query",
+    prompt: "What does the tattoo workflow recommend for handoff quality?",
+  },
+  {
+    label: "Create Sample Bot",
+    prompt: "Create a sample bot spec for recurring invoice reconciliation.",
   },
 ];
 
@@ -55,7 +70,8 @@ function loadMessages(): Message[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    return JSON.parse(raw) as Message[];
+    const parsed = JSON.parse(raw) as Message[];
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
@@ -76,7 +92,14 @@ export function AiAssistant() {
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [seeded, setSeeded] = useState<boolean | null>(null);
+  const [seedCount, setSeedCount] = useState(0);
+  const [seedBusy, setSeedBusy] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  const latestAssistant = [...messages]
+    .reverse()
+    .find((message) => message.role === "assistant" && message.inspector);
 
   useEffect(() => {
     setMessages(loadMessages());
@@ -93,6 +116,86 @@ export function AiAssistant() {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, open]);
+
+  useEffect(() => {
+    const shouldAddGreeting = loadMessages().length === 0;
+
+    const bootstrap = async () => {
+      try {
+        const response = await fetch("/api/v1/rag/seed", {
+          method: "GET",
+          headers: DEMO_HEADERS,
+        });
+
+        const payload = (await response.json()) as {
+          data?: {
+            documentCount: number;
+            isSeeded: boolean;
+          };
+          error?: { message?: string };
+        };
+
+        if (!response.ok || !payload.data) {
+          throw new Error(
+            payload.error?.message ?? "Unable to initialize RAG seed.",
+          );
+        }
+
+        setSeeded(payload.data.isSeeded);
+        setSeedCount(payload.data.documentCount);
+
+        if (shouldAddGreeting) {
+          setMessages([
+            {
+              id: uid(),
+              role: "assistant",
+              text: "I can answer questions, create bots, and run workflows. Start with a one-click demo action or ask me anything.",
+            },
+          ]);
+        }
+      } catch {
+        setSeeded(false);
+      }
+    };
+
+    bootstrap();
+  }, []);
+
+  async function reseed() {
+    if (seedBusy) return;
+    setSeedBusy(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/v1/rag/seed", {
+        method: "POST",
+        headers: DEMO_HEADERS,
+      });
+
+      const payload = (await response.json()) as {
+        data?: {
+          documentCount: number;
+          isSeeded: boolean;
+        };
+        error?: { message?: string };
+      };
+
+      if (!response.ok || !payload.data) {
+        throw new Error(
+          payload.error?.message ?? "Unable to reseed documents.",
+        );
+      }
+
+      setSeeded(payload.data.isSeeded);
+      setSeedCount(payload.data.documentCount);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Unable to reseed documents.",
+      );
+    } finally {
+      setSeedBusy(false);
+    }
+  }
 
   async function sendMessage(text: string) {
     const trimmed = text.trim();
@@ -117,8 +220,10 @@ export function AiAssistant() {
           agent: InspectorPayload["agent"];
           cacheHit: boolean;
           context: InspectorPayload["context"];
+          contextCount: number;
           latencyMs: number;
           normalizedQuery: string;
+          ragUsed: boolean;
           runId: string;
           specializationHint?: string;
           tokenEstimate: number;
@@ -140,12 +245,15 @@ export function AiAssistant() {
           agent: payload.data.agent,
           cacheHit: payload.data.cacheHit,
           context: payload.data.context,
+          contextCount: payload.data.contextCount,
           latencyMs: payload.data.latencyMs,
           normalizedQuery: payload.data.normalizedQuery,
+          ragUsed: payload.data.ragUsed,
           runId: payload.data.runId,
           specializationHint: payload.data.specializationHint,
           tokenEstimate: payload.data.tokenEstimate,
         },
+        prompt: trimmed,
         role: "assistant",
         text: responseText,
       };
@@ -175,7 +283,7 @@ export function AiAssistant() {
         aria-label={open ? "Close assistant" : "Open assistant"}
         onClick={() => setOpen((v) => !v)}
       >
-        {open ? "×" : "✦"}
+        {open ? "x" : "*"}
       </button>
 
       {open && (
@@ -185,23 +293,50 @@ export function AiAssistant() {
           aria-label="AI Assistant"
         >
           <div className="assistant-panel__header">
-            <span className="assistant-panel__title">Axiom Assistant</span>
-            <div style={{ display: "flex", gap: "0.5rem" }}>
+            <div className="assistant-panel__title-wrap">
+              <span className="assistant-panel__title">Axiom Assistant</span>
+              <span
+                className={`assistant-seed-pill${seeded ? " assistant-seed-pill--ready" : ""}`}
+              >
+                {seeded ? `Seeded (${seedCount})` : "Seed pending"}
+              </span>
+            </div>
+            <div className="assistant-tools-row">
               <button
-                className="assistant-panel__clear"
+                className="assistant-tool-btn"
                 onClick={() => setShowInspector((v) => !v)}
                 title="Toggle inspector"
               >
                 Inspector
               </button>
               <button
-                className="assistant-panel__clear"
+                className="assistant-tool-btn"
+                onClick={reseed}
+                disabled={seedBusy}
+              >
+                {seedBusy ? "Seeding..." : "Re-seed"}
+              </button>
+              <button
+                className="assistant-tool-btn"
                 onClick={clearHistory}
                 title="Clear history"
               >
                 Clear
               </button>
             </div>
+          </div>
+
+          <div className="assistant-action-row">
+            {DEMO_ACTIONS.map((action) => (
+              <button
+                key={action.label}
+                className="assistant-chip"
+                onClick={() => sendMessage(action.prompt)}
+                disabled={thinking}
+              >
+                {action.label}
+              </button>
+            ))}
           </div>
 
           <div className="assistant-panel__messages">
@@ -220,6 +355,17 @@ export function AiAssistant() {
                 }
               >
                 {m.text}
+                {m.inspector ? (
+                  <div className="assistant-badges">
+                    <span className="assistant-badge">{m.inspector.agent}</span>
+                    <span className="assistant-badge">
+                      {m.inspector.ragUsed ? "RAG" : "No RAG"}
+                    </span>
+                    <span className="assistant-badge">
+                      {m.inspector.cacheHit ? "Cache hit" : "Cache miss"}
+                    </span>
+                  </div>
+                ) : null}
               </div>
             ))}
             {thinking && (
@@ -237,48 +383,42 @@ export function AiAssistant() {
 
           {showInspector ? (
             <div className="assistant-inspector">
-              {(() => {
-                const latestAssistant = [...messages]
-                  .reverse()
-                  .find(
-                    (message) =>
-                      message.role === "assistant" && message.inspector,
-                  );
-
-                if (!latestAssistant?.inspector) {
-                  return (
-                    <p className="muted" style={{ margin: 0 }}>
-                      Send a prompt to inspect agent, latency, tokens, cache,
-                      and context.
-                    </p>
-                  );
-                }
-
-                const inspector = latestAssistant.inspector;
-                return (
-                  <>
-                    <p className="muted" style={{ margin: 0 }}>
-                      run {inspector.runId}
-                    </p>
-                    <p style={{ margin: "0.25rem 0 0" }}>
-                      agent {inspector.agent} | latency {inspector.latencyMs}ms
-                      | tokens {inspector.tokenEstimate} | cache{" "}
-                      {inspector.cacheHit ? "hit" : "miss"}
-                    </p>
-                    <p className="muted" style={{ margin: "0.35rem 0 0" }}>
-                      normalized query: {inspector.normalizedQuery}
-                    </p>
-                    <p className="muted" style={{ margin: "0.35rem 0 0" }}>
-                      context: {inspector.context.length} chunks
-                    </p>
-                  </>
-                );
-              })()}
+              {!latestAssistant?.inspector ? (
+                <p className="muted" style={{ margin: 0 }}>
+                  Send a prompt to inspect agent, latency, tokens, cache, and
+                  context docs.
+                </p>
+              ) : (
+                <>
+                  <p className="muted" style={{ margin: 0 }}>
+                    run {latestAssistant.inspector.runId}
+                  </p>
+                  <p style={{ margin: "0.25rem 0 0" }}>
+                    agent {latestAssistant.inspector.agent} | latency{" "}
+                    {latestAssistant.inspector.latencyMs}ms | tokens{" "}
+                    {latestAssistant.inspector.tokenEstimate}
+                  </p>
+                  <p className="muted" style={{ margin: "0.35rem 0 0" }}>
+                    cache {latestAssistant.inspector.cacheHit ? "hit" : "miss"}{" "}
+                    | rag {latestAssistant.inspector.ragUsed ? "used" : "none"}
+                  </p>
+                  <p className="muted" style={{ margin: "0.35rem 0 0" }}>
+                    prompt: {latestAssistant.prompt}
+                  </p>
+                  <p className="muted" style={{ margin: "0.35rem 0 0" }}>
+                    normalized query:{" "}
+                    {latestAssistant.inspector.normalizedQuery}
+                  </p>
+                  <p className="muted" style={{ margin: "0.35rem 0 0" }}>
+                    context docs: {latestAssistant.inspector.contextCount}
+                  </p>
+                </>
+              )}
             </div>
           ) : null}
 
           <div className="assistant-panel__suggestions">
-            {SUGGESTIONS.map((s) => (
+            {ONBOARDING_SUGGESTIONS.map((s) => (
               <button
                 key={s.label}
                 className="assistant-chip"
@@ -296,7 +436,7 @@ export function AiAssistant() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask something…"
+              placeholder="Ask something..."
               disabled={thinking}
               autoFocus
             />
@@ -306,7 +446,7 @@ export function AiAssistant() {
               disabled={thinking || !input.trim()}
               aria-label="Send"
             >
-              ↑
+              ^
             </button>
           </div>
         </div>

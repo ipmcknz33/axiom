@@ -23,6 +23,8 @@ Establish a production-grade foundation for a modular AI operating system with s
 - `GET /api/v1/access`: centralized access/entitlement snapshot endpoint for role-aware plan, feature, and limit checks.
 - `GET /api/v1/entitlements/snapshot`: lightweight authenticated entitlement snapshot endpoint for demo shell gating.
 - `POST /api/v1/rag/ingest`: authenticated RAG ingestion endpoint for document indexing.
+- `GET /api/v1/rag/seed`: auto-seeds deterministic demo corpus and returns seed status.
+- `POST /api/v1/rag/seed`: force reseed deterministic demo corpus for resettable demos.
 - `POST /api/v1/ai/query`: authenticated orchestration pipeline endpoint with retrieval-augmented responses.
 - `GET /api/v1/ai/metrics`: authenticated telemetry endpoint exposing AI runtime summary metrics and recent runs.
 - `GET /api/v1/projects`, `/tasks`, `/memory`: scaffolds to anchor phase 2 implementation.
@@ -105,17 +107,20 @@ Establish a production-grade foundation for a modular AI operating system with s
 - Conversation history is persisted to `localStorage` under `axiom_assistant_messages` and survives full page reloads.
 - Assistant prompts now call `/api/v1/ai/query`, which routes to the orchestrator and injects retrieved context from the in-memory RAG store.
 - Response routing is intent-based with four delegation roles: `orchestrator`, `research`, `builder`, and `debugger`.
-- Suggestion chips provide one-click access to common intents: summarize priorities, automate reporting, review approvals.
+- On first mount, assistant calls `/api/v1/rag/seed` to guarantee seeded demo context without manual setup.
+- Onboarding suggestions: `Create a marketing plan`, `Explain how this system works`, `Build a workflow bot`.
+- One-click demo actions: `Run Demo Workflow`, `Test RAG Query`, and `Create Sample Bot`.
 - Thinking state renders a three-dot blink animation while a response is being produced.
-- Inspector mode displays per-run metadata including prompt normalization, selected agent, token estimate, latency, cache-hit status, and retrieval context count.
+- Inspector mode displays per-run metadata including selected agent, latency, token estimate, cache-hit status, prompt, normalized query, RAG usage, and retrieval context docs.
 
 ## RAG and observability runtime
 
 - `server/rag/store.ts` provides ingestion, deterministic hashed embeddings, cosine retrieval, and bounded query-level retrieval cache.
+- `server/rag/store.ts` also provides deterministic seed corpus helpers: `ensureSeeded`, `isSeeded`, and `reseedDemoDocuments`.
 - Runtime state is attached to `globalThis` for stable behavior during local hot reloads.
 - `server/ai/orchestrator.ts` runs the query pipeline: delegation, retrieval, synthesis, and run metadata shaping.
 - `server/ai/telemetry.ts` tracks bounded run history and aggregate metrics (`requestCount`, `avgLatencyMs`, `totalTokens`, `cacheHitRate`, `errorCount`).
-- `app/components/dashboard/observability-panel.tsx` surfaces metrics and recent run snapshots in the workspace shell.
+- `app/components/dashboard/observability-panel.tsx` surfaces metric cards, recent runs, and slow-query highlighting in the workspace shell.
 
 ## Planned phase 2 evolution
 

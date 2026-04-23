@@ -22,6 +22,7 @@ export type QueryPipelineOutput = {
   }>;
   latencyMs: number;
   normalizedQuery: string;
+  ragUsed: boolean;
   response: string;
   runId: string;
   specializationHint?: string;
@@ -137,7 +138,9 @@ export async function runQueryPipeline(
     cacheHit: retrieval.cacheHit,
     contextCount: retrieval.items.length,
     latencyMs,
+    normalizedQuery: retrieval.normalizedQuery,
     query: input.query,
+    ragUsed: retrieval.items.length > 0,
     runId,
     timestamp: new Date().toISOString(),
     tokenEstimate,
@@ -156,6 +159,7 @@ export async function runQueryPipeline(
     })),
     latencyMs,
     normalizedQuery: retrieval.normalizedQuery,
+    ragUsed: retrieval.items.length > 0,
     response,
     runId,
     specializationHint,

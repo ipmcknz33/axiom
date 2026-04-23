@@ -7,12 +7,16 @@ type MetricsPayload = {
     cacheEntries: number;
     chunks: number;
     documents: number;
+    isSeeded: boolean;
   };
   recentRuns: Array<{
     agent: "orchestrator" | "research" | "builder" | "debugger";
     cacheHit: boolean;
     contextCount: number;
     latencyMs: number;
+    normalizedQuery: string;
+    query: string;
+    ragUsed: boolean;
     runId: string;
     timestamp: string;
     tokenEstimate: number;
@@ -30,6 +34,8 @@ const DEMO_HEADERS = {
   "x-axiom-role": "admin",
   "x-axiom-user-id": "11111111-1111-4111-8111-111111111111",
 };
+
+const SLOW_QUERY_THRESHOLD_MS = 1200;
 
 export function ObservabilityPanel() {
   const [loading, setLoading] = useState(false);
@@ -81,50 +87,64 @@ export function ObservabilityPanel() {
       </div>
 
       <div className="observability-grid" style={{ marginTop: "0.9rem" }}>
-        <div className="permission-card">
+        <div className="observability-card">
           <p className="muted">Requests</p>
           <strong>{metrics?.summary.requestCount ?? 0}</strong>
         </div>
-        <div className="permission-card">
+        <div className="observability-card">
           <p className="muted">Avg latency</p>
           <strong>{metrics?.summary.avgLatencyMs ?? 0}ms</strong>
         </div>
-        <div className="permission-card">
-          <p className="muted">Tokens</p>
-          <strong>{metrics?.summary.totalTokens ?? 0}</strong>
-        </div>
-        <div className="permission-card">
-          <p className="muted">Cache hit rate</p>
+        <div className="observability-card">
+          <p className="muted">Cache hit</p>
           <strong>
             {Math.round((metrics?.summary.cacheHitRate ?? 0) * 100)}%
           </strong>
         </div>
+        <div className="observability-card">
+          <p className="muted">Errors</p>
+          <strong>{metrics?.summary.errorCount ?? 0}</strong>
+        </div>
       </div>
 
       <p className="muted" style={{ marginTop: "0.8rem" }}>
-        RAG documents: {metrics?.rag.documents ?? 0} | chunks:{" "}
-        {metrics?.rag.chunks ?? 0} | cached queries:{" "}
-        {metrics?.rag.cacheEntries ?? 0}
+        RAG seeded: {metrics?.rag.isSeeded ? "yes" : "no"} | docs:{" "}
+        {metrics?.rag.documents ?? 0} | chunks: {metrics?.rag.chunks ?? 0} |
+        cached queries: {metrics?.rag.cacheEntries ?? 0}
       </p>
 
       {error ? <p className="upgrade-error">{error}</p> : null}
 
-      <div style={{ marginTop: "0.9rem", display: "grid", gap: "0.5rem" }}>
-        {(metrics?.recentRuns ?? []).slice(0, 5).map((run) => (
-          <div className="permission-card" key={run.runId}>
+      <div className="observability-runs" style={{ marginTop: "0.85rem" }}>
+        {(metrics?.recentRuns?.length ?? 0) === 0 ? (
+          <p className="muted" style={{ margin: 0 }}>
+            No runs yet. Use the assistant demo actions, then refresh to inspect
+            traces.
+          </p>
+        ) : (
+          (metrics?.recentRuns ?? []).slice(0, 6).map((run) => (
             <div
-              className="feature-row"
-              style={{ borderBottom: "none", paddingBottom: 0 }}
+              key={run.runId}
+              className={`observability-run${run.latencyMs > SLOW_QUERY_THRESHOLD_MS ? " observability-run--slow" : ""}`}
             >
-              <span>{run.agent}</span>
-              <span className="muted">{run.latencyMs}ms</span>
+              <div
+                className="feature-row"
+                style={{ borderBottom: "none", paddingBottom: 0 }}
+              >
+                <span>{run.agent}</span>
+                <span className="muted">{run.latencyMs}ms</span>
+              </div>
+              <p className="muted" style={{ margin: "0.3rem 0 0" }}>
+                {run.normalizedQuery}
+              </p>
+              <p className="muted" style={{ margin: "0.25rem 0 0" }}>
+                rag {run.ragUsed ? "used" : "none"} | cache{" "}
+                {run.cacheHit ? "hit" : "miss"} | context {run.contextCount} |
+                tokens {run.tokenEstimate}
+              </p>
             </div>
-            <p className="muted" style={{ margin: "0.35rem 0 0" }}>
-              tokens {run.tokenEstimate} | context {run.contextCount} | cache{" "}
-              {run.cacheHit ? "hit" : "miss"}
-            </p>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );
